@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: line-square-booking-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: LINE_CHANNEL_SECRET
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: SQUARE_ACCESS_TOKEN
+        sync: false
+      - key: SQUARE_VERSION
+        value: 2026-05-20
+      - key: SEARCH_DAYS_AHEAD
+        value: 180
+      - key: LINKS_FILE
+        value: ./data/links.json
