@@ -338,7 +338,6 @@ function loadDotEnv(filePath) {
   }
 }
       await Promise.all((payload.events || []).map(handleLineEventSafely));
-      return sendJson(res, 200, { ok: true });
     }
 
     sendJson(res, 404, { error: "not found" });
