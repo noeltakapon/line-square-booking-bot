@@ -20,6 +20,7 @@ const config = {
   searchDaysAhead: Number(process.env.SEARCH_DAYS_AHEAD || 180),
   linksFile: path.resolve(__dirname, "..", process.env.LINKS_FILE || "./data/links.json")
 };
+const serviceNameCache = new Map();
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -75,7 +76,7 @@ async function handleLineEvent(event) {
     }
 
     const bookings = await listUpcomingBookings(linkedCustomerId);
-    return replyText(event.replyToken, formatBookings(bookings));
+    return replyText(event.replyToken, await formatBookings(bookings));
   }
 
   const identity = parseIdentity(text);
@@ -96,7 +97,7 @@ async function handleLineEvent(event) {
 
   await linkLineUser(lineUserId, matchedCustomer.id);
   const bookings = await listUpcomingBookings(matchedCustomer.id);
-  return replyText(event.replyToken, `本人確認ができました。\n\n${formatBookings(bookings)}`);
+  return replyText(event.replyToken, `本人確認ができました。\n\n${await formatBookings(bookings)}`);
 }
 
 async function handleLineEventSafely(event) {
@@ -185,22 +186,56 @@ async function listUpcomingBookings(customerId) {
     .sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
 }
 
-function formatBookings(bookings) {
+async function formatBookings(bookings) {
   if (!bookings.length) {
     return "現在、確認できる今後の予約はありません。";
   }
 
-  const lines = bookings.slice(0, 5).map((booking, index) => {
+  const lines = await Promise.all(bookings.slice(0, 5).map(async (booking, index) => {
     const date = formatTokyoDate(booking.start_at);
-    const minutes = (booking.appointment_segments || []).reduce(
+    const segments = booking.appointment_segments || [];
+    const menuNames = (await Promise.all(segments.map(getServiceName))).filter(Boolean);
+    const menu = menuNames.length ? ` / ${menuNames.join("・")}` : "";
+    const minutes = segments.reduce(
       (sum, segment) => sum + Number(segment.duration_minutes || 0),
       0
     );
     const duration = minutes ? ` / ${minutes}分` : "";
-    return `${index + 1}. ${date}${duration}`;
-  });
+    return `${index + 1}. ${date}${menu}${duration}`;
+  }));
 
   return `今後の予約はこちらです。\n${lines.join("\n")}`;
+}
+
+async function getServiceName(segment) {
+  const serviceVariationId = segment.service_variation_id;
+  if (!serviceVariationId) return "";
+  if (serviceNameCache.has(serviceVariationId)) return serviceNameCache.get(serviceVariationId);
+
+  try {
+    const result = await squareRequest(`/v2/catalog/object/${encodeURIComponent(serviceVariationId)}`, {
+      method: "GET"
+    });
+    const name = catalogObjectName(result.object, result.related_objects || []);
+    serviceNameCache.set(serviceVariationId, name);
+    return name;
+  } catch (error) {
+    console.error("Failed to load service name:", error);
+    serviceNameCache.set(serviceVariationId, "");
+    return "";
+  }
+}
+
+function catalogObjectName(object, relatedObjects) {
+  const variationName = object?.item_variation_data?.name || "";
+  const itemId = object?.item_variation_data?.item_id || "";
+  const item = relatedObjects.find((related) => related.id === itemId);
+  const itemName = item?.item_data?.name || "";
+
+  if (itemName && variationName && itemName !== variationName) {
+    return `${itemName} ${variationName}`;
+  }
+  return itemName || variationName || "";
 }
 
 function formatTokyoDate(value) {
