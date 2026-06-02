@@ -69,6 +69,7 @@ async function handleLineEvent(event) {
   if (isBookingCommand(text)) {
     const linkedCustomerId = await getLinkedCustomerId(lineUserId);
     if (!linkedCustomerId) {
+      await markVerificationPending(lineUserId);
       return replyText(
         event.replyToken,
         "予約確認ですね。初回だけ本人確認をします。\nお名前と電話番号の下4桁を送ってください。\n例: 山田花子 1234"
@@ -79,12 +80,13 @@ async function handleLineEvent(event) {
     return replyText(event.replyToken, await formatBookings(bookings));
   }
 
+  if (!(await isVerificationPending(lineUserId))) {
+    return;
+  }
+
   const identity = parseIdentity(text);
   if (!identity) {
-    return replyText(
-      event.replyToken,
-      "「予約確認」と送ると予約を確認できます。初回は、お名前と電話番号の下4桁も必要です。"
-    );
+    return;
   }
 
   const matchedCustomer = await findCustomerByNameAndPhoneSuffix(identity.name, identity.phoneSuffix);
@@ -316,9 +318,25 @@ async function linkLineUser(lineUserId, squareCustomerId) {
   const links = await readLinks();
   links[lineUserId] = {
     squareCustomerId,
+    verificationPending: false,
     linkedAt: new Date().toISOString()
   };
   await writeLinks(links);
+}
+
+async function markVerificationPending(lineUserId) {
+  const links = await readLinks();
+  links[lineUserId] = {
+    ...links[lineUserId],
+    verificationPending: true,
+    verificationRequestedAt: new Date().toISOString()
+  };
+  await writeLinks(links);
+}
+
+async function isVerificationPending(lineUserId) {
+  const links = await readLinks();
+  return links[lineUserId]?.verificationPending === true;
 }
 
 async function unlinkLineUser(lineUserId) {
