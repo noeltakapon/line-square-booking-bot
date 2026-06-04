@@ -69,7 +69,7 @@ async function handleLineEvent(event) {
   if (isBookingCommand(text)) {
     const linkedCustomerId = await getLinkedCustomerId(lineUserId);
     if (!linkedCustomerId) {
-      await markVerificationPending(lineUserId);
+      await markVerificationPending(lineUserId, "booking");
       return replyText(
         event.replyToken,
         "予約確認ですね。初回だけ本人確認をします。\nお名前と電話番号の下4桁を送ってください。\n例: 山田花子 1234"
@@ -80,7 +80,22 @@ async function handleLineEvent(event) {
     return replyText(event.replyToken, await formatBookings(bookings));
   }
 
-  if (!(await isVerificationPending(lineUserId))) {
+  if (isVisitHistoryCommand(text)) {
+    const linkedCustomerId = await getLinkedCustomerId(lineUserId);
+    if (!linkedCustomerId) {
+      await markVerificationPending(lineUserId, "history");
+      return replyText(
+        event.replyToken,
+        "来店履歴ですね。初回だけ本人確認をします。\nお名前と電話番号の下4桁を送ってください。\n例: 山田花子 1234"
+      );
+    }
+
+    const bookings = await listPastBookings(linkedCustomerId);
+    return replyText(event.replyToken, await formatPastBookings(bookings));
+  }
+
+  const pendingAction = await getVerificationPendingAction(lineUserId);
+  if (!pendingAction) {
     return;
   }
 
@@ -98,6 +113,11 @@ async function handleLineEvent(event) {
   }
 
   await linkLineUser(lineUserId, matchedCustomer.id);
+  if (pendingAction === "history") {
+    const bookings = await listPastBookings(matchedCustomer.id);
+    return replyText(event.replyToken, `本人確認ができました。\n\n${await formatPastBookings(bookings)}`);
+  }
+
   const bookings = await listUpcomingBookings(matchedCustomer.id);
   return replyText(event.replyToken, `本人確認ができました。\n\n${await formatBookings(bookings)}`);
 }
@@ -117,7 +137,11 @@ async function handleLineEventSafely(event) {
 }
 
 function isBookingCommand(text) {
-  return ["予約確認", "予約", "確認"].includes(text.replace(/\s/g, ""));
+  return text.replace(/\s/g, "") === "予約確認";
+}
+
+function isVisitHistoryCommand(text) {
+  return text.replace(/\s/g, "") === "来店履歴";
 }
 
 function isResetCommand(text) {
@@ -172,20 +196,47 @@ async function listUpcomingBookings(customerId) {
   const now = new Date();
   const daysAhead = Math.min(config.searchDaysAhead, 30);
   const max = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+  const bookings = await listBookingsInRange(customerId, now, max, 20);
+
+  return bookings
+    .filter((booking) => ["ACCEPTED", "PENDING"].includes(booking.status))
+    .sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
+}
+
+async function listPastBookings(customerId) {
+  const results = [];
+  const now = new Date();
+  let rangeEnd = now;
+
+  for (let chunk = 0; chunk < 12 && results.length < 5; chunk += 1) {
+    const rangeStart = new Date(rangeEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const bookings = await listBookingsInRange(customerId, rangeStart, rangeEnd, 20);
+    results.push(
+      ...bookings.filter((booking) =>
+        new Date(booking.start_at) < now && !["CANCELLED_BY_CUSTOMER", "CANCELLED_BY_SELLER", "DECLINED"].includes(booking.status)
+      )
+    );
+    rangeEnd = rangeStart;
+  }
+
+  return results
+    .sort((a, b) => new Date(b.start_at) - new Date(a.start_at))
+    .slice(0, 5);
+}
+
+async function listBookingsInRange(customerId, start, end, limit) {
   const params = new URLSearchParams({
     customer_id: customerId,
-    start_at_min: now.toISOString(),
-    start_at_max: max.toISOString(),
-    limit: "20"
+    start_at_min: start.toISOString(),
+    start_at_max: end.toISOString(),
+    limit: String(limit)
   });
 
   const result = await squareRequest(`/v2/bookings?${params.toString()}`, {
     method: "GET"
   });
 
-  return (result.bookings || [])
-    .filter((booking) => ["ACCEPTED", "PENDING"].includes(booking.status))
-    .sort((a, b) => new Date(a.start_at) - new Date(b.start_at));
+  return result.bookings || [];
 }
 
 async function formatBookings(bookings) {
@@ -207,6 +258,27 @@ async function formatBookings(bookings) {
   }));
 
   return `今後の予約はこちらです。\n${lines.join("\n")}`;
+}
+
+async function formatPastBookings(bookings) {
+  if (!bookings.length) {
+    return "確認できる過去の来店履歴はありません。";
+  }
+
+  const lines = await Promise.all(bookings.map(async (booking, index) => {
+    const date = formatTokyoDate(booking.start_at);
+    const segments = booking.appointment_segments || [];
+    const menuNames = (await Promise.all(segments.map(getServiceName))).filter(Boolean);
+    const menu = menuNames.length ? ` / ${menuNames.join("・")}` : "";
+    const minutes = segments.reduce(
+      (sum, segment) => sum + Number(segment.duration_minutes || 0),
+      0
+    );
+    const duration = minutes ? ` / ${minutes}分` : "";
+    return `${index + 1}. ${date}${menu}${duration}`;
+  }));
+
+  return `これまでの来店履歴はこちらです。\n${lines.join("\n")}`;
 }
 
 async function getServiceName(segment) {
@@ -319,24 +391,27 @@ async function linkLineUser(lineUserId, squareCustomerId) {
   links[lineUserId] = {
     squareCustomerId,
     verificationPending: false,
+    pendingAction: null,
     linkedAt: new Date().toISOString()
   };
   await writeLinks(links);
 }
 
-async function markVerificationPending(lineUserId) {
+async function markVerificationPending(lineUserId, action) {
   const links = await readLinks();
   links[lineUserId] = {
     ...links[lineUserId],
     verificationPending: true,
+    pendingAction: action,
     verificationRequestedAt: new Date().toISOString()
   };
   await writeLinks(links);
 }
 
-async function isVerificationPending(lineUserId) {
+async function getVerificationPendingAction(lineUserId) {
   const links = await readLinks();
-  return links[lineUserId]?.verificationPending === true;
+  if (links[lineUserId]?.verificationPending !== true) return null;
+  return links[lineUserId]?.pendingAction || "booking";
 }
 
 async function unlinkLineUser(lineUserId) {
