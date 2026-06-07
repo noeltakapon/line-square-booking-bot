@@ -22,7 +22,6 @@ const config = {
 };
 const serviceNameCache = new Map();
 
-// --- Upstash Redis helpers ---
 async function redisGet(key) {
   const res = await fetch(`${config.upstashUrl}/get/${encodeURIComponent(key)}`, {
     headers: { Authorization: `Bearer ${config.upstashToken}` },
@@ -60,8 +59,10 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 401, { error: "invalid LINE signature" });
       }
       const payload = JSON.parse(rawBody.toString("utf8"));
+      // すぐ200を返してからイベント処理（タイムアウト対策）
+      sendJson(res, 200, { ok: true });
       await Promise.all((payload.events || []).map(handleLineEventSafely));
-      return sendJson(res, 200, { ok: true });
+      return;
     }
     sendJson(res, 404, { error: "not found" });
   } catch (error) {
@@ -78,31 +79,41 @@ async function handleLineEvent(event) {
   if (event.type !== "message" || event.message?.type !== "text" || !event.replyToken) return;
   const lineUserId = event.source?.userId;
   const text = event.message.text.trim();
-  if (!lineUserId) return replyText(event.replyToken, "個別チャットでご利用ください。");
+  if (!lineUserId) {
+    await replyText(event.replyToken, "個別チャットでご利用ください。");
+    return;
+  }
 
   if (isResetCommand(text)) {
     await redisDel(`link:${lineUserId}`);
-    return replyText(event.replyToken, "登録を解除しました。もう一度「予約確認」と送ると再登録できます。");
+    await replyText(event.replyToken, "登録を解除しました。もう一度「予約確認」と送ると再登録できます。");
+    return;
   }
 
   if (isBookingCommand(text)) {
     const link = await redisGet(`link:${lineUserId}`);
     if (!link?.squareCustomerId) {
       await redisSet(`pending:${lineUserId}`, { action: "booking" });
-      return replyText(event.replyToken, "予約確認ですね。初回だけ本人確認をします。\nお名前と電話番号の下4桁を送ってください。\n例: 山田花子 1234");
+      await replyText(event.replyToken, "予約確認ですね。初回だけ本人確認をします。\nお名前と電話番号の下4桁を送ってください。\n例: 山田花子 1234");
+      return;
     }
+    await replyText(event.replyToken, "確認中です...");
     const bookings = await listUpcomingBookings(link.squareCustomerId);
-    return replyText(event.replyToken, await formatBookings(bookings));
+    await pushText(lineUserId, await formatBookings(bookings));
+    return;
   }
 
   if (isVisitHistoryCommand(text)) {
     const link = await redisGet(`link:${lineUserId}`);
     if (!link?.squareCustomerId) {
       await redisSet(`pending:${lineUserId}`, { action: "history" });
-      return replyText(event.replyToken, "来店履歴ですね。初回だけ本人確認をします。\nお名前と電話番号の下4桁を送ってください。\n例: 山田花子 1234");
+      await replyText(event.replyToken, "来店履歴ですね。初回だけ本人確認をします。\nお名前と電話番号の下4桁を送ってください。\n例: 山田花子 1234");
+      return;
     }
+    await replyText(event.replyToken, "確認中です...");
     const bookings = await listPastBookings(link.squareCustomerId);
-    return replyText(event.replyToken, await formatPastBookings(bookings));
+    await pushText(lineUserId, await formatPastBookings(bookings));
+    return;
   }
 
   const pending = await redisGet(`pending:${lineUserId}`);
@@ -111,9 +122,13 @@ async function handleLineEvent(event) {
   const identity = parseIdentity(text);
   if (!identity) return;
 
+  // 先に「確認中」と返信してからSquare処理
+  await replyText(event.replyToken, "確認中です...");
+
   const matchedCustomer = await findCustomerByNameAndPhoneSuffix(identity.name, identity.phoneSuffix);
   if (!matchedCustomer) {
-    return replyText(event.replyToken, "該当するお客様情報が見つかりませんでした。お名前の表記と電話番号下4桁を確認して、もう一度送ってください。");
+    await pushText(lineUserId, "該当するお客様情報が見つかりませんでした。お名前の表記と電話番号下4桁を確認して、もう一度送ってください。");
+    return;
   }
 
   await redisSet(`link:${lineUserId}`, { squareCustomerId: matchedCustomer.id, linkedAt: new Date().toISOString() });
@@ -121,10 +136,11 @@ async function handleLineEvent(event) {
 
   if (pending.action === "history") {
     const bookings = await listPastBookings(matchedCustomer.id);
-    return replyText(event.replyToken, `本人確認ができました。\n\n${await formatPastBookings(bookings)}`);
+    await pushText(lineUserId, `本人確認ができました。\n\n${await formatPastBookings(bookings)}`);
+    return;
   }
   const bookings = await listUpcomingBookings(matchedCustomer.id);
-  return replyText(event.replyToken, `本人確認ができました。\n\n${await formatBookings(bookings)}`);
+  await pushText(lineUserId, `本人確認ができました。\n\n${await formatBookings(bookings)}`);
 }
 
 async function handleLineEventSafely(event) {
@@ -132,9 +148,9 @@ async function handleLineEventSafely(event) {
     await handleLineEvent(event);
   } catch (error) {
     console.error("LINE event handling failed:", error);
-    if (event.replyToken) {
-      await replyText(event.replyToken, "予約情報の確認中にエラーが出ました。少し時間をおいて、もう一度送ってください。")
-        .catch((e) => console.error("Fallback reply failed:", e));
+    if (event.source?.userId) {
+      await pushText(event.source.userId, "予約情報の確認中にエラーが出ました。少し時間をおいて、もう一度送ってください。")
+        .catch((e) => console.error("Fallback push failed:", e));
     }
   }
 }
@@ -307,6 +323,22 @@ async function replyText(replyToken, text) {
     body: JSON.stringify({ replyToken, messages: [{ type: "text", text }] }),
   });
   if (!response.ok) throw new Error(`LINE reply failed: ${response.status} ${await response.text()}`);
+}
+
+async function pushText(userId, text) {
+  if (!config.lineChannelAccessToken) {
+    console.log("LINE push skipped:", text);
+    return;
+  }
+  const response = await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.lineChannelAccessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ to: userId, messages: [{ type: "text", text }] }),
+  });
+  if (!response.ok) throw new Error(`LINE push failed: ${response.status} ${await response.text()}`);
 }
 
 function verifyLineSignature(rawBody, signature) {
