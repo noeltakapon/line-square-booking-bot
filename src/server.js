@@ -181,7 +181,7 @@ function isResetCommand(text) {
 }
 
 function parseIdentity(text) {
-  const match = text.match(/^(.+?)[\s　,、]+(\d{4})$/);
+  const match = text.match(/^(.+?)[\s　,、]*(\d{4})$/);
   if (!match) return null;
   return {
     name: normalizeText(match[1]),
