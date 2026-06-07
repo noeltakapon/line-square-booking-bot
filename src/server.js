@@ -59,10 +59,9 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 401, { error: "invalid LINE signature" });
       }
       const payload = JSON.parse(rawBody.toString("utf8"));
-      // すぐ200を返してからイベント処理（タイムアウト対策）
-      sendJson(res, 200, { ok: true });
-      await Promise.all((payload.events || []).map(handleLineEventSafely));
-      return;
+      // 先に200を返してバックグラウンドで処理
+      Promise.all((payload.events || []).map(handleLineEventSafely));
+      return sendJson(res, 200, { ok: true });
     }
     sendJson(res, 404, { error: "not found" });
   } catch (error) {
@@ -122,7 +121,6 @@ async function handleLineEvent(event) {
   const identity = parseIdentity(text);
   if (!identity) return;
 
-  // 先に「確認中」と返信してからSquare処理
   await replyText(event.replyToken, "確認中です...");
 
   const matchedCustomer = await findCustomerByNameAndPhoneSuffix(identity.name, identity.phoneSuffix);
