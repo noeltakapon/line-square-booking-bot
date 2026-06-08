@@ -595,6 +595,14 @@ const CALENDAR_STAFF = {
   takeshi: { id: "TM4KBBvc9KKU5Auf", name: "二瓶 武士" },
   naoko:   { id: "TMyoTzCPU06PeMxI",  name: "NAOKO" }
 };
+const CALENDAR_SERVICE_VARIATION_IDS = [
+  "CA3NETYVK7MDE3DRCEN4NRQQ",
+  "BJ56FDJJ5VS3XG3SKVCCZIGL",
+  "IZXDSFFQ2S3NLFI5UXXZ5FEF",
+  "RCKFBHDPYHHRYWBC2AYN3L7E",
+  "ZPEQ33L4T5Y2UATQYKA7M6Y7",
+  "HT6N43VJPKQ4IE6GCGXQ5TFK"
+];
 const CALENDAR_OPEN_HOUR  = 10;
 const CALENDAR_CLOSE_HOUR = 19;
 const CALENDAR_CLOSED_DOW = 2; // 火曜定休
@@ -620,30 +628,43 @@ async function serveAvailability(req, res) {
     }
 
     const teamMemberId = CALENDAR_STAFF[staffKey].id;
+    const startAt = new Date(`${startDate}T${String(CALENDAR_OPEN_HOUR).padStart(2, "0")}:00:00+09:00`).toISOString();
+    const endAt = new Date(`${endDate}T${String(CALENDAR_CLOSE_HOUR).padStart(2, "0")}:00:00+09:00`).toISOString();
 
-    const body = {
-      query: {
-        filter: {
-          start_at_range: {
-            start_at: new Date(`${startDate}T${String(CALENDAR_OPEN_HOUR).padStart(2, "0")}:00:00+09:00`).toISOString(),
-            end_at:   new Date(`${endDate}T${String(CALENDAR_CLOSE_HOUR).padStart(2, "0")}:00:00+09:00`).toISOString()
-          },
-          location_id: CALENDAR_LOCATION_ID,
-          segment_filters: [
-            {
-              team_member_id_filter: { any: [teamMemberId] }
+    const results = await Promise.all(
+      CALENDAR_SERVICE_VARIATION_IDS.map((serviceVariationId) =>
+        squareRequest("/v2/bookings/availability/search", {
+          method: "POST",
+          body: {
+            query: {
+              filter: {
+                start_at_range: {
+                  start_at: startAt,
+                  end_at: endAt
+                },
+                location_id: CALENDAR_LOCATION_ID,
+                segment_filters: [
+                  {
+                    service_variation_id: serviceVariationId,
+                    team_member_id_filter: { any: [teamMemberId] }
+                  }
+                ]
+              }
             }
-          ]
-        }
+          }
+        })
+      )
+    );
+
+    const availabilityMap = new Map();
+    for (const availability of results.flatMap((result) => result.availabilities || [])) {
+      const key = `${availability.start_at || ""}:${availability.location_id || ""}:${availability.appointment_segments?.[0]?.team_member_id || ""}`;
+      if (!availabilityMap.has(key)) {
+        availabilityMap.set(key, availability);
       }
-    };
+    }
 
-    const result = await squareRequest("/v2/bookings/availability/search", {
-      method: "POST",
-      body
-    });
-
-    const slots = buildHourlySlots(startDate, endDate, result.availabilities || []);
+    const slots = buildHourlySlots(startDate, endDate, [...availabilityMap.values()]);
     sendJson(res, 200, { slots });
 
   } catch (err) {
