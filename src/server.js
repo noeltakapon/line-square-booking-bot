@@ -671,7 +671,19 @@ async function serveAvailability(req, res) {
     }
 
     const slots = buildHourlySlots(startDate, endDate, [...availabilityMap.values()]);
-    sendJson(res, 200, { slots });
+    const openCount = Object.values(slots).reduce((total, day) => (
+      total + Object.values(day).filter((status) => status === "open").length
+    ), 0);
+    console.log(`availability result: staff=${staffKey} square=${availabilities.length} unique=${availabilityMap.size} open=${openCount}`);
+    sendJson(res, 200, {
+      slots,
+      debug: {
+        staff: staffKey,
+        squareAvailabilityCount: availabilities.length,
+        uniqueAvailabilityCount: availabilityMap.size,
+        openSlotCount: openCount
+      }
+    });
 
   } catch (err) {
     console.error("availability error:", err);
@@ -696,14 +708,13 @@ function buildHourlySlots(startDate, endDate, availabilities) {
   }
 
   const result = {};
-  const cur = new Date(`${startDate}T00:00:00+09:00`);
-  const end = new Date(`${endDate}T00:00:00+09:00`);
-  end.setDate(end.getDate() + 1);
+  const cur = parseDateOnlyUtc(startDate);
+  const end = parseDateOnlyUtc(endDate);
+  end.setUTCDate(end.getUTCDate() + 1);
 
   while (cur < end) {
-    const jst     = new Date(cur.getTime() + 9 * 60 * 60 * 1000);
-    const dateStr = jst.toISOString().slice(0, 10);
-    const dow     = cur.getDay();
+    const dateStr = cur.toISOString().slice(0, 10);
+    const dow     = cur.getUTCDay();
     const isClosed = dow === CALENDAR_CLOSED_DOW;
 
     if (!result[dateStr]) result[dateStr] = {};
@@ -712,10 +723,15 @@ function buildHourlySlots(startDate, endDate, availabilities) {
       result[dateStr][h] = isClosed ? "holiday" : openSet.has(`${dateStr}:${h}`) ? "open" : "closed";
     }
 
-    cur.setDate(cur.getDate() + 1);
+    cur.setUTCDate(cur.getUTCDate() + 1);
   }
 
   return result;
+}
+
+function parseDateOnlyUtc(dateStr) {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
 function buildCalendarHtml() {
@@ -855,7 +871,12 @@ function getWeekDates(){
   d.setDate(d.getDate()-dow+weekOffset*7);
   return Array.from({length:7},(_,i)=>{const x=new Date(d);x.setDate(d.getDate()+i);return x;});
 }
-function fmt(d){return d.toISOString().slice(0,10);}
+	function fmt(d){
+	  const y=d.getFullYear();
+	  const m=String(d.getMonth()+1).padStart(2,'0');
+	  const day=String(d.getDate()).padStart(2,'0');
+	  return y+'-'+m+'-'+day;
+	}
 async function loadAndRender(){
   const days=getWeekDates();
   const start=fmt(days[0]),end=fmt(days[6]);
