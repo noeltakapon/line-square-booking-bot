@@ -672,13 +672,8 @@ async function serveAvailability(req, res) {
       }
     }
 
-    let slots = buildHourlySlots(startDate, endDate, [...availabilityMap.values()]);
-    let source = "square_availability";
-    if (availabilityMap.size === 0) {
-      const bookings = await listCalendarBookings(new Date(startAt), new Date(endAt));
-      slots = buildHourlySlotsFromBookings(startDate, endDate, bookings, teamMemberId);
-      source = "bookings_fallback";
-    }
+    const slots = buildHourlySlots(startDate, endDate, [...availabilityMap.values()]);
+    const source = "square_availability";
     const openCount = Object.values(slots).reduce((total, day) => (
       total + Object.values(day).filter((status) => status === "open").length
     ), 0);
@@ -736,85 +731,6 @@ function buildHourlySlots(startDate, endDate, availabilities) {
   }
 
   return result;
-}
-
-async function listCalendarBookings(start, end) {
-  const bookings = [];
-  let cursor;
-
-  for (let page = 0; page < 5; page += 1) {
-    const params = new URLSearchParams({
-      start_at_min: start.toISOString(),
-      start_at_max: end.toISOString(),
-      limit: "100"
-    });
-    if (cursor) params.set("cursor", cursor);
-
-    const result = await squareRequest(`/v2/bookings?${params.toString()}`, {
-      method: "GET"
-    });
-    bookings.push(...(result.bookings || []));
-
-    if (!result.cursor) break;
-    cursor = result.cursor;
-  }
-
-  return bookings;
-}
-
-function buildHourlySlotsFromBookings(startDate, endDate, bookings, teamMemberId) {
-  const result = {};
-  const cur = parseDateOnlyUtc(startDate);
-  const end = parseDateOnlyUtc(endDate);
-  end.setUTCDate(end.getUTCDate() + 1);
-
-  while (cur < end) {
-    const dateStr = cur.toISOString().slice(0, 10);
-    const isClosed = cur.getUTCDay() === CALENDAR_CLOSED_DOW;
-    result[dateStr] = {};
-
-    for (let h = CALENDAR_OPEN_HOUR; h < CALENDAR_CLOSE_HOUR; h++) {
-      result[dateStr][h] = isClosed ? "holiday" : "open";
-    }
-
-    cur.setUTCDate(cur.getUTCDate() + 1);
-  }
-
-  const ignoredStatuses = new Set(["CANCELLED_BY_CUSTOMER", "CANCELLED_BY_SELLER", "DECLINED"]);
-  for (const booking of bookings) {
-    if (ignoredStatuses.has(booking.status)) continue;
-
-    for (const segment of booking.appointment_segments || []) {
-      if (segment.team_member_id !== teamMemberId) continue;
-      const startValue = segment.start_at || booking.start_at;
-      if (!startValue) continue;
-
-      const durationMinutes = Number(segment.duration_minutes || 60);
-      markBookedHours(result, startValue, durationMinutes);
-    }
-  }
-
-  return result;
-}
-
-function markBookedHours(slots, startValue, durationMinutes) {
-  const startJst = new Date(new Date(startValue).getTime() + 9 * 60 * 60 * 1000);
-  const endJst = new Date(startJst.getTime() + durationMinutes * 60 * 1000);
-  const dateStr = startJst.toISOString().slice(0, 10);
-  const daySlots = slots[dateStr];
-  if (!daySlots) return;
-
-  const year = startJst.getUTCFullYear();
-  const month = startJst.getUTCMonth();
-  const day = startJst.getUTCDate();
-
-  for (let h = CALENDAR_OPEN_HOUR; h < CALENDAR_CLOSE_HOUR; h++) {
-    const slotStart = Date.UTC(year, month, day, h);
-    const slotEnd = slotStart + 60 * 60 * 1000;
-    if (startJst.getTime() < slotEnd && endJst.getTime() > slotStart) {
-      daySlots[h] = "closed";
-    }
-  }
 }
 
 function parseDateOnlyUtc(dateStr) {
