@@ -55,6 +55,10 @@ const server = http.createServer(async (req, res) => {
       return serveAvailability(req, res);
     }
 
+    if (req.method === "GET" && req.url === "/api/services") {
+      return serveServices(res);
+    }
+
     sendJson(res, 404, { error: "not found" });
   } catch (error) {
     console.error(error);
@@ -590,32 +594,56 @@ function loadDotEnv(filePath) {
 // カレンダー機能（既存コードには手を加えていません）
 // ============================================================
 
-const CALENDAR_LOCATION_ID = "LQ2HAT073YS1N";
 const CALENDAR_STAFF = {
   takeshi: { id: "TM4KBBvc9KKU5Auf", name: "二瓶 武士" },
-  naoko:   { id: "TMyoTzCPU06PeMxI",  name: "NAOKO" }
+  naoko:   { id: "TMyoTzCPU06PeMxI", name: "NAOKO" }
 };
-const CALENDAR_SERVICE_VARIATION_IDS = [
-  "CA3NETYVK7MDE3DRCEN4NRQQ",
-  "BJ56FDJJ5VS3XG3SKVCCZIGL",
-  "IZXDSFFQ2S3NLFI5UXXZ5FEF",
-  "RCKFBHDPYHHRYWBC2AYN3L7E",
-  "ZPEQ33L4T5Y2UATQYKA7M6Y7",
-  "HT6N43VJPKQ4IE6GCGXQ5TFK"
-];
-const CALENDAR_OPEN_HOUR  = 9;
-const CALENDAR_CLOSE_HOUR = 20;
-const CALENDAR_CLOSED_DOW = 2; // 火曜定休
+const CALENDAR_OPEN_HOUR  = 10;
+const CALENDAR_CLOSE_HOUR = 19;
+const CALENDAR_CLOSED_DOW = [1, 2]; // 月曜・火曜定休
+const CALENDAR_BREAK_HOURS = [12]; // 昼休み
+// Square オンライン予約ページ
+const SQUARE_BOOKING_URL = "https://squareup.com/appointments/book/LQ2HAT073YS1N";
 
 function serveCalendar(res) {
   const html = buildCalendarHtml();
-  res.writeHead(200, {
-    "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-    "Pragma": "no-cache",
-    "Expires": "0"
-  });
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(html);
+}
+
+// サービス（メニュー）一覧とservice_variation_idを取得して、
+// どのスタッフが担当しているかも併せて返す
+async function serveServices(res) {
+  try {
+    // 1) カタログからAPPOINTMENTS_SERVICE（予約メニュー）を全部取得
+    const catalog = await squareRequest("/v2/catalog/list?types=ITEM", { method: "GET" });
+    const items = (catalog.objects || []).filter(
+      (o) => o.item_data?.product_type === "APPOINTMENTS_SERVICE"
+    );
+
+    // 2) 各メニューのバリエーション（=予約に使うservice_variation_id）を展開
+    const services = [];
+    for (const item of items) {
+      const itemName = item.item_data?.name || "";
+      for (const v of item.item_data?.variations || []) {
+        const vd = v.item_variation_data || {};
+        // team_member_ids: そのバリエーションを担当できるスタッフ
+        services.push({
+          service_variation_id: v.id,
+          name: itemName + (vd.name && vd.name !== itemName ? ` / ${vd.name}` : ""),
+          duration_minutes: vd.service_duration ? Math.round(vd.service_duration / 60000) : null,
+          team_member_ids: vd.team_member_ids || [],
+          available_for_takeshi: (vd.team_member_ids || []).includes("TM4KBBvc9KKU5Auf"),
+          available_for_naoko: (vd.team_member_ids || []).includes("TMyoTzCPU06PeMxI")
+        });
+      }
+    }
+
+    sendJson(res, 200, { total: services.length, services });
+  } catch (err) {
+    console.error("services error:", err);
+    sendJson(res, 500, { error: err.message });
+  }
 }
 
 async function serveAvailability(req, res) {
@@ -633,114 +661,69 @@ async function serveAvailability(req, res) {
     }
 
     const teamMemberId = CALENDAR_STAFF[staffKey].id;
-    const startAt = new Date(`${startDate}T${String(CALENDAR_OPEN_HOUR).padStart(2, "0")}:00:00+09:00`).toISOString();
-    const endAt = new Date(`${endDate}T${String(CALENDAR_CLOSE_HOUR).padStart(2, "0")}:00:00+09:00`).toISOString();
 
-    const results = await Promise.allSettled(
-      CALENDAR_SERVICE_VARIATION_IDS.map((serviceVariationId) =>
-        squareRequest("/v2/bookings/availability/search", {
-          method: "POST",
-          body: {
-            query: {
-              filter: {
-                start_at_range: {
-                  start_at: startAt,
-                  end_at: endAt
-                },
-                location_id: CALENDAR_LOCATION_ID,
-                segment_filters: [
-                  {
-                    service_variation_id: serviceVariationId
-                  }
-                ]
-              }
-            }
-          }
-        })
-      )
+    // 既存予約を取得して、予約が入っている時間帯を特定する
+    const startAt = new Date(`${startDate}T00:00:00+09:00`).toISOString();
+    const endAt   = new Date(`${endDate}T23:59:59+09:00`).toISOString();
+
+    const params = new URLSearchParams({
+      start_at_min: startAt,
+      start_at_max: endAt,
+      limit: "100"
+    });
+
+    const result = await squareRequest(`/v2/bookings?${params.toString()}`, { method: "GET" });
+    const bookings = (result.bookings || []).filter(b =>
+      ["ACCEPTED", "PENDING"].includes(b.status) &&
+      b.appointment_segments?.some(s => s.team_member_id === teamMemberId)
     );
 
-    const availabilityMap = new Map();
-    for (const failed of results.filter((result) => result.status === "rejected")) {
-      console.warn("availability service search skipped:", failed.reason?.message || failed.reason);
-    }
-    const availabilities = results
-      .filter((result) => result.status === "fulfilled")
-      .flatMap((result) => result.value.availabilities || [])
-      .filter((availability) =>
-        (availability.appointment_segments || []).some((segment) => segment.team_member_id === teamMemberId)
-      );
-    for (const availability of availabilities) {
-      const key = `${availability.start_at || ""}:${availability.location_id || ""}:${availability.appointment_segments?.[0]?.team_member_id || ""}`;
-      if (!availabilityMap.has(key)) {
-        availabilityMap.set(key, availability);
+    // 予約が入っている時間帯をセットに入れる
+    const bookedSet = new Set();
+    for (const booking of bookings) {
+      const startJst = new Date(new Date(booking.start_at).getTime() + 9 * 60 * 60 * 1000);
+      const dateStr  = startJst.toISOString().slice(0, 10);
+      const startH   = startJst.getUTCHours();
+      const durationMins = booking.appointment_segments?.reduce((s, seg) => s + (seg.duration_minutes || 0), 0) || 60;
+      const durationH = Math.ceil(durationMins / 60);
+      for (let i = 0; i < durationH; i++) {
+        bookedSet.add(`${dateStr}:${startH + i}`);
       }
     }
 
-    const slots = buildHourlySlots(startDate, endDate, [...availabilityMap.values()]);
-    const source = "square_availability";
-    const openCount = Object.values(slots).reduce((total, day) => (
-      total + Object.values(day).filter((status) => status === "open").length
-    ), 0);
-    console.log(`availability result: staff=${staffKey} source=${source} square=${availabilities.length} unique=${availabilityMap.size} open=${openCount}`);
-    sendJson(res, 200, {
-      slots,
-      debug: {
-        staff: staffKey,
-        source,
-        squareAvailabilityCount: availabilities.length,
-        uniqueAvailabilityCount: availabilityMap.size,
-        openSlotCount: openCount
+    // 日付×時間のスロットを作る
+    const slots = {};
+    const cur = new Date(`${startDate}T00:00:00+09:00`);
+    const end = new Date(`${endDate}T00:00:00+09:00`);
+    end.setDate(end.getDate() + 1);
+
+    while (cur < end) {
+      const jst     = new Date(cur.getTime() + 9 * 60 * 60 * 1000);
+      const dateStr = jst.toISOString().slice(0, 10);
+      const dow     = cur.getDay();
+      const isClosed = CALENDAR_CLOSED_DOW.includes(dow);
+
+      if (!slots[dateStr]) slots[dateStr] = {};
+
+      for (let h = CALENDAR_OPEN_HOUR; h < CALENDAR_CLOSE_HOUR; h++) {
+        if (isClosed) {
+          slots[dateStr][h] = "holiday";
+        } else if (CALENDAR_BREAK_HOURS.includes(h) || bookedSet.has(`${dateStr}:${h}`)) {
+          slots[dateStr][h] = "closed";
+        } else {
+          slots[dateStr][h] = "open";
+        }
       }
-    });
+
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    sendJson(res, 200, { slots });
 
   } catch (err) {
     console.error("availability error:", err);
     sendJson(res, 500, { error: err.message });
   }
-}
-
-function toTokyoParts(value) {
-  const jst = new Date(new Date(value).getTime() + 9 * 60 * 60 * 1000);
-  return {
-    dateStr: jst.toISOString().slice(0, 10),
-    hour: jst.getUTCHours()
-  };
-}
-
-function buildHourlySlots(startDate, endDate, availabilities) {
-  const openSet = new Set();
-  for (const availability of availabilities) {
-    if (!availability.start_at) continue;
-    const { dateStr, hour } = toTokyoParts(availability.start_at);
-    openSet.add(`${dateStr}:${hour}`);
-  }
-
-  const result = {};
-  const cur = parseDateOnlyUtc(startDate);
-  const end = parseDateOnlyUtc(endDate);
-  end.setUTCDate(end.getUTCDate() + 1);
-
-  while (cur < end) {
-    const dateStr = cur.toISOString().slice(0, 10);
-    const dow     = cur.getUTCDay();
-    const isClosed = dow === CALENDAR_CLOSED_DOW;
-
-    if (!result[dateStr]) result[dateStr] = {};
-
-    for (let h = CALENDAR_OPEN_HOUR; h < CALENDAR_CLOSE_HOUR; h++) {
-      result[dateStr][h] = isClosed ? "holiday" : openSet.has(`${dateStr}:${h}`) ? "open" : "closed";
-    }
-
-    cur.setUTCDate(cur.getUTCDate() + 1);
-  }
-
-  return result;
-}
-
-function parseDateOnlyUtc(dateStr) {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
 }
 
 function buildCalendarHtml() {
@@ -749,10 +732,10 @@ function buildCalendarHtml() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Noëlhair | ご予約</title>
+<title>Noelchair | 空き状況</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
 <style>
-  :root{--tiffany:#81D8D0;--tiffany-light:#b2ece8;--tiffany-dark:#5bbfb7;--bg:#f7fafa;--white:#ffffff;--ink:#1a2625;--ink-muted:#6b8280;}
+  :root{--tiffany:#81D8D0;--tiffany-light:#b2ece8;--tiffany-dark:#5bbfb7;--bg:#f7fafa;--white:#fff;--ink:#1a2625;--ink-muted:#6b8280;}
   *{margin:0;padding:0;box-sizing:border-box;}
   body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
   .header{background:var(--white);padding:16px 20px 12px;border-bottom:1px solid rgba(129,216,208,0.2);position:sticky;top:0;z-index:30;}
@@ -781,42 +764,30 @@ function buildCalendarHtml() {
   .grid-table th .dnum{font-size:14px;line-height:1.2;}.grid-table th .dname{font-size:9px;opacity:0.7;}
   .grid-table td{border:1px solid rgba(129,216,208,0.12);text-align:center;height:38px;min-width:42px;transition:background 0.12s;}
   .grid-table td.time-cell{font-size:10px;color:var(--ink-muted);background:var(--white);padding:0 5px;white-space:nowrap;}
-  .grid-table td.c-closed{background:#f0f0f0;}.grid-table td.c-holiday{background:#faf0f0;}.grid-table td.c-open{background:rgba(129,216,208,0.15);cursor:pointer;}.grid-table td.c-open:hover{background:rgba(129,216,208,0.38);}.grid-table td.c-selected{background:var(--tiffany)!important;}
+  .grid-table td.c-closed{background:#f0f0f0;}
+  .grid-table td.c-holiday{background:#faf0f0;}
+  .grid-table td.c-open{background:rgba(129,216,208,0.15);}
+  .grid-table td.c-past{background:#f8f8f8;}
   .cell-in{display:flex;align-items:center;justify-content:center;height:100%;font-size:13px;}
-  .c-open .cell-in{color:var(--tiffany-dark);}.c-closed .cell-in{color:#ccc;font-size:11px;}.c-holiday .cell-in{color:#dbb;font-size:10px;}.c-selected .cell-in{color:white;font-weight:400;}
+  .c-open .cell-in{color:var(--tiffany-dark);}
+  .c-closed .cell-in{color:#ccc;font-size:11px;}
+  .c-holiday .cell-in{color:#dbb;font-size:10px;}
+  .c-past .cell-in{color:#ddd;font-size:11px;}
   .loading{text-align:center;padding:20px;color:var(--ink-muted);font-size:12px;}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 16px;}
   .legend-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--ink-muted);}
   .legend-box{width:13px;height:13px;border-radius:3px;}
-  .lb-open{background:rgba(129,216,208,0.25);border:1px solid rgba(129,216,208,0.5);}.lb-closed{background:#f0f0f0;border:1px solid #ddd;}.lb-holiday{background:#faf0f0;border:1px solid #f0d0d0;}
-  .menu-panel{background:var(--white);border:1.5px solid rgba(129,216,208,0.3);border-radius:12px;padding:16px;margin-top:4px;display:none;animation:fadeUp 0.25s ease;}
-  .menu-panel.visible{display:block;}
-  @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-  .menu-panel-header{font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:300;letter-spacing:0.05em;margin-bottom:4px;}
-  .menu-panel-sub{font-size:10px;color:var(--ink-muted);margin-bottom:12px;}
-  .menu-list{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;}
-  .menu-item{border:1.5px solid rgba(129,216,208,0.22);border-radius:9px;background:var(--bg);padding:10px 12px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;justify-content:space-between;}
-  .menu-item:hover{border-color:var(--tiffany);background:rgba(129,216,208,0.06);}
-  .menu-item.selected{border-color:var(--tiffany-dark);background:rgba(129,216,208,0.12);}
-  .menu-item-name{font-size:12px;font-weight:300;line-height:1.4;}.menu-item-cat{font-size:10px;color:var(--ink-muted);margin-top:1px;}
-  .menu-item-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;margin-left:8px;}
-  .menu-item-price{font-size:11px;white-space:nowrap;}.menu-item-time{font-size:10px;color:var(--tiffany-dark);background:rgba(129,216,208,0.15);border-radius:4px;padding:2px 6px;white-space:nowrap;}
-  .menu-unavail{opacity:0.35;cursor:not-allowed;}.menu-unavail:hover{border-color:rgba(129,216,208,0.22)!important;background:var(--bg)!important;}
-  .confirm-block{border-top:1px solid rgba(129,216,208,0.2);padding-top:12px;display:none;}
-  .confirm-block.visible{display:block;}
-  .confirm-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
-  .confirm-row{display:flex;justify-content:space-between;font-size:12px;}
-  .confirm-label{color:var(--ink-muted);}
-  .book-cta{background:var(--tiffany-dark);color:white;border:none;border-radius:10px;padding:13px;width:100%;font-family:'Noto Sans JP',sans-serif;font-size:13px;letter-spacing:0.08em;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px;}
-  .book-cta:hover{background:var(--tiffany);box-shadow:0 4px 14px rgba(129,216,208,0.35);}
-  .book-cta-note{font-size:10px;color:var(--ink-muted);text-align:center;margin-top:6px;}
-  .clear-btn{display:block;width:100%;background:transparent;border:1px solid rgba(129,216,208,0.3);color:var(--ink-muted);border-radius:8px;padding:8px;font-size:11px;cursor:pointer;margin-top:8px;transition:all 0.2s;text-align:center;}
-  .clear-btn:hover{border-color:var(--tiffany);color:var(--tiffany-dark);}
+  .lb-open{background:rgba(129,216,208,0.25);border:1px solid rgba(129,216,208,0.5);}
+  .lb-closed{background:#f0f0f0;border:1px solid #ddd;}
+  .lb-holiday{background:#faf0f0;border:1px solid #f0d0d0;}
+  .note{font-size:11px;color:var(--ink-muted);text-align:center;padding:12px 16px;background:rgba(129,216,208,0.06);border-radius:8px;margin-top:4px;line-height:1.6;}
+  .book-link{display:block;margin-top:16px;background:var(--tiffany-dark);color:white;text-align:center;padding:13px;border-radius:10px;font-size:13px;letter-spacing:0.08em;text-decoration:none;transition:all 0.2s;}
+  .book-link:hover{background:var(--tiffany);box-shadow:0 4px 14px rgba(129,216,208,0.35);}
 </style>
 </head>
 <body>
 <div class="header"><div class="header-inner">
-  <div class="salon-name">Noël<span>hair</span></div>
+  <div class="salon-name">Noel<span>hair</span></div>
   <div class="subtitle">空き状況 · AVAILABILITY</div>
 </div></div>
 <div class="tabs-wrap"><div class="tabs">
@@ -829,168 +800,89 @@ function buildCalendarHtml() {
 </div></div>
 <div class="main">
   <div class="week-nav">
-    <button class="nav-btn" onclick="changeWeek(-1)">‹</button>
+    <button class="nav-btn" onclick="changeWeek(-1)">&#x2039;</button>
     <div class="week-label" id="weekLabel"></div>
-    <button class="nav-btn" onclick="changeWeek(1)">›</button>
+    <button class="nav-btn" onclick="changeWeek(1)">&#x203a;</button>
   </div>
   <div class="grid-wrap"><table class="grid-table" id="gridTable"><tbody><tr><td class="loading" colspan="8">読み込み中...</td></tr></tbody></table></div>
   <div class="legend">
     <div class="legend-item"><div class="legend-box lb-open"></div>空きあり</div>
-    <div class="legend-item"><div class="legend-box lb-closed"></div>満席</div>
+    <div class="legend-item"><div class="legend-box lb-closed"></div>予約あり</div>
     <div class="legend-item"><div class="legend-box lb-holiday"></div>定休 / 休み</div>
   </div>
-  <div class="menu-panel" id="menuPanel">
-    <div class="menu-panel-header" id="menuPanelHeader"></div>
-    <div class="menu-panel-sub" id="menuPanelSub"></div>
-    <div class="menu-list" id="menuList"></div>
-    <div class="confirm-block" id="confirmBlock">
-      <div class="confirm-rows" id="confirmRows"></div>
-      <button class="book-cta" id="bookBtn">この内容で予約する →</button>
-      <div class="book-cta-note">Squareの予約ページに移動します</div>
-    </div>
-    <button class="clear-btn" onclick="clearSelection()">← 日時を選び直す</button>
-  </div>
+  <div class="note">○の時間帯はご予約いただけます。<br>ご予約はSquareの予約ページからお願いします。</div>
+  <a href="https://squareup.com/appointments/book/LQ2HAT073YS1N" class="book-link" target="_blank">ご予約はこちら →</a>
 </div>
 <script>
-const MENUS=[
-  {id:'cut_mens',name:'メンズカット（カット＋シャンプー＋ブロー）',cat:'メンズ',duration:60,price:'¥2,000〜¥6,800'},
-  {id:'recharge',name:'『リチャージ』カット＋シャンプー＋顔剃り＋炭酸パック＋ブロー',cat:'メンズプレミアム',duration:60,price:'¥4,700'},
-  {id:'royal',name:'『ロイヤルリブート』頭皮から顔までの最上級カットコース',cat:'メンズプレミアム',duration:60,price:'¥7,800'},
-  {id:'detox',name:'『THE 頭皮洗浄 –DEEP DETOX–』',cat:'メンズプレミアム',duration:60,price:'¥6,800'},
-  {id:'color_only',name:'カラーのみ',cat:'カラー',duration:120,price:'¥5,500〜¥7,000'},
-  {id:'herb_color',name:'カット＆香草カラー',cat:'メンズ',duration:120,price:'¥9,600'},
-  {id:'silky',name:'シルキーコートプレミアムカラー（カット＆カラー＆シルキーコート）',cat:'レディースプレミアム',duration:120,price:'¥11,100〜¥14,000'},
-  {id:'cut_color_mens',name:'メンズカット＆カラー',cat:'メンズ',duration:180,price:'¥8,600〜¥15,000'},
-  {id:'cut_color_perm',name:'メンズカット＆カラー＆パーマ',cat:'メンズ',duration:180,price:'¥12,600〜¥13,700'},
-  {id:'mesh',name:'メンズ限定 カット＆ホワイトメッシュ',cat:'メンズ',duration:180,price:'¥16,000'},
-];
-const OPEN_HOUR=9,CLOSE_HOUR=20;
-const today=new Date();today.setHours(0,0,0,0);
-let currentStaff='takeshi',weekOffset=0,selectedSlot=null,selectedMenu=null,slotsCache={};
-
+var OPEN_HOUR=10,CLOSE_HOUR=19;
+var today=new Date();today.setHours(0,0,0,0);
+var currentStaff='takeshi',weekOffset=0,slotsCache={};
 function switchStaff(s){
   currentStaff=s;
   document.getElementById('tab-takeshi').classList.toggle('active',s==='takeshi');
   document.getElementById('tab-naoko').classList.toggle('active',s==='naoko');
-  clearSelection();loadAndRender();
+  slotsCache={};loadAndRender();
 }
 function getWeekDates(){
-  const d=new Date(today);
-  const dow=d.getDay()===0?6:d.getDay()-1;
+  var d=new Date(today);
+  var dow=d.getDay()===0?6:d.getDay()-1;
   d.setDate(d.getDate()-dow+weekOffset*7);
-  return Array.from({length:7},(_,i)=>{const x=new Date(d);x.setDate(d.getDate()+i);return x;});
+  var arr=[];
+  for(var i=0;i<7;i++){var x=new Date(d);x.setDate(d.getDate()+i);arr.push(x);}
+  return arr;
 }
-	function fmt(d){
-	  const y=d.getFullYear();
-	  const m=String(d.getMonth()+1).padStart(2,'0');
-	  const day=String(d.getDate()).padStart(2,'0');
-	  return y+'-'+m+'-'+day;
-	}
+function fmt(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 async function loadAndRender(){
-  const days=getWeekDates();
-  const start=fmt(days[0]),end=fmt(days[6]);
-  const cacheKey=currentStaff+start;
+  var days=getWeekDates();
+  var start=fmt(days[0]),end=fmt(days[6]);
+  var cacheKey=currentStaff+start;
   document.getElementById('gridTable').innerHTML='<tbody><tr><td class="loading" colspan="8">読み込み中...</td></tr></tbody>';
   if(!slotsCache[cacheKey]){
     try{
-      const r=await fetch('/api/availability?staff='+currentStaff+'&start='+start+'&end='+end+'&t='+Date.now(),{cache:'no-store'});
-      const data=await r.json();
+      var r=await fetch('/api/availability?staff='+currentStaff+'&start='+start+'&end='+end);
+      var data=await r.json();
       slotsCache[cacheKey]=data.slots||{};
     }catch(e){slotsCache[cacheKey]={};}
   }
   renderGrid(days,slotsCache[cacheKey]);
 }
 function renderGrid(days,slots){
-  const dayNames=['日','月','火','水','木','金','土'];
-  let html='<thead><tr><th class="time-col"></th>';
-  days.forEach(d=>{
-    const dow=d.getDay();
-    const isToday=d.getTime()===today.getTime();
-    const cls=(dow===0?'sun':dow===6?'sat':'')+(isToday?' today-h':'');
-    html+=\`<th class="\${cls}"><div class="dnum">\${d.getDate()}</div><div class="dname">\${dayNames[dow]}</div></th>\`;
+  var dayNames=['日','月','火','水','木','金','土'];
+  var months=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  var first=days[0],last=days[6];
+  document.getElementById('weekLabel').textContent=
+    first.getFullYear()+'年 '+months[first.getMonth()]+' '+first.getDate()+'日 〜 '+months[last.getMonth()]+' '+last.getDate()+'日';
+  var html='<thead><tr><th class="time-col"></th>';
+  days.forEach(function(d){
+    var dow=d.getDay();
+    var isToday=d.getTime()===today.getTime();
+    var cls=(dow===0?'sun':dow===6?'sat':'')+(isToday?' today-h':'');
+    html+='<th class="'+cls+'"><div class="dnum">'+d.getDate()+'</div><div class="dname">'+dayNames[dow]+'</div></th>';
   });
   html+='</tr></thead><tbody>';
-  for(let h=OPEN_HOUR;h<CLOSE_HOUR;h++){
-    html+=\`<tr><td class="time-cell">\${String(h).padStart(2,'0')}:00</td>\`;
-    days.forEach(d=>{
-      const ds=fmt(d);
-      const isPast=d<today||(d.getTime()===today.getTime()&&h<new Date().getHours());
-      const isSelected=selectedSlot&&selectedSlot.ds===ds&&selectedSlot.hour===h;
-      const status=isPast?'closed':(slots[ds]&&slots[ds][h])||'closed';
-      let cls=status==='open'?'c-open':status==='holiday'?'c-holiday':'c-closed';
-      if(isSelected)cls='c-selected';
-      const icon=status==='open'?'○':status==='holiday'?'休':'×';
-      const onclick=status==='open'&&!isPast?\`onclick="selectSlot('\${ds}',\${h})"\`:'';
-      html+=\`<td class="\${cls}" \${onclick}><div class="cell-in">\${icon}</div></td>\`;
+  var nowHour=new Date().getHours();
+  for(var h=OPEN_HOUR;h<CLOSE_HOUR;h++){
+    html+='<tr><td class="time-cell">'+String(h).padStart(2,'0')+':00</td>';
+    days.forEach(function(d){
+      var ds=fmt(d);
+      var isPast=d<today||(d.getTime()===today.getTime()&&h<=nowHour);
+      var status=isPast?'past':((slots[ds]&&slots[ds][h])||'closed');
+      var cls,icon;
+      if(status==='past'){cls='c-past';icon='—';}
+      else if(status==='holiday'){cls='c-holiday';icon='休';}
+      else if(status==='open'){cls='c-open';icon='○';}
+      else{cls='c-closed';icon='×';}
+      html+='<td class="'+cls+'"><div class="cell-in">'+icon+'</div></td>';
     });
     html+='</tr>';
   }
   html+='</tbody>';
   document.getElementById('gridTable').innerHTML=html;
 }
-function selectSlot(ds,hour){
-  let avail=0;
-  const daySlots=Object.values(slotsCache).find(s=>s[ds]);
-  if(daySlots&&daySlots[ds]){
-    for(let h=hour;h<CLOSE_HOUR;h++){
-      if(daySlots[ds][h]==='open')avail++;else break;
-    }
-  }else{avail=1;}
-  selectedSlot={ds,hour,avail};
-  selectedMenu=null;
-  const days=getWeekDates();
-  renderGrid(days,slotsCache[currentStaff+fmt(days[0])]||{});
-  showMenuPanel(ds,hour,avail);
-}
-function showMenuPanel(ds,hour,avail){
-  const d=new Date(ds);
-  const months=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
-  const dayNames=['日','月','火','水','木','金','土'];
-  document.getElementById('menuPanelHeader').textContent=months[d.getMonth()]+' '+d.getDate()+'日（'+dayNames[d.getDay()]+'） '+String(hour).padStart(2,'0')+':00〜';
-  document.getElementById('menuPanelSub').textContent='この時間から'+avail+'時間分空いています。入れるメニューを選んでください。';
-  renderMenuList(avail);
-  document.getElementById('confirmBlock').className='confirm-block';
-  document.getElementById('menuPanel').className='menu-panel visible';
-  document.getElementById('menuPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-function renderMenuList(avail){
-  const maxMins=avail*60;
-  document.getElementById('menuList').innerHTML=MENUS.map(m=>{
-    const fits=m.duration<=maxMins;
-    return '<div class="menu-item'+(selectedMenu&&selectedMenu.id===m.id?' selected':'')+(fits?'':' menu-unavail')+'"'+(fits?' data-menu-id="'+m.id+'"':'')+'>'+
-      '<div><div class="menu-item-name">'+m.name+'</div><div class="menu-item-cat">'+m.cat+'</div></div>'+
-      '<div class="menu-item-right"><div class="menu-item-price">'+m.price+'</div><div class="menu-item-time">⏱ '+fmtDur(m.duration)+'</div></div>'+
-    '</div>';
-  }).join('');
-  document.querySelectorAll('#menuList .menu-item[data-menu-id]').forEach(el=>{
-    el.addEventListener('click',()=>selectMenu(el.dataset.menuId));
-  });
-}
-function selectMenu(id){
-  selectedMenu=MENUS.find(m=>m.id===id);
-  renderMenuList(selectedSlot.avail);
-  const d=new Date(selectedSlot.ds);
-  const months=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
-  const dayNames=['日','月','火','水','木','金','土'];
-  const endH=selectedSlot.hour+selectedMenu.duration/60;
-  document.getElementById('confirmRows').innerHTML=
-    '<div class="confirm-row"><span class="confirm-label">担当</span><span>'+(currentStaff==='takeshi'?'二瓶 武士':'NAOKO')+'</span></div>'+
-    '<div class="confirm-row"><span class="confirm-label">日付</span><span>'+months[d.getMonth()]+' '+d.getDate()+'日（'+dayNames[d.getDay()]+'）</span></div>'+
-    '<div class="confirm-row"><span class="confirm-label">時間</span><span>'+String(selectedSlot.hour).padStart(2,'0')+':00 〜 '+String(endH).padStart(2,'0')+':00</span></div>'+
-    '<div class="confirm-row"><span class="confirm-label">メニュー</span><span>'+selectedMenu.name+'</span></div>'+
-    '<div class="confirm-row"><span class="confirm-label">料金</span><span>'+selectedMenu.price+'</span></div>';
-  document.getElementById('confirmBlock').className='confirm-block visible';
-  document.getElementById('confirmBlock').scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-function fmtDur(m){const h=Math.floor(m/60),r=m%60;return h+'時間'+(r?r+'分':'');}
-function clearSelection(){
-  selectedSlot=null;selectedMenu=null;
-  document.getElementById('menuPanel').className='menu-panel';
-  const days=getWeekDates();
-  renderGrid(days,slotsCache[currentStaff+fmt(days[0])]||{});
-}
-function changeWeek(d){weekOffset+=d;clearSelection();loadAndRender();}
+function changeWeek(d){weekOffset+=d;loadAndRender();}
 loadAndRender();
-<\/script>
+</script>
 </body></html>`;
 }
