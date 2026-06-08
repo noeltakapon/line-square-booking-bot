@@ -645,7 +645,8 @@ async function serveAvailability(req, res) {
                 location_id: CALENDAR_LOCATION_ID,
                 segment_filters: [
                   {
-                    service_variation_id: serviceVariationId
+                    service_variation_id: serviceVariationId,
+                    team_member_id_filter: { any: [teamMemberId] }
                   }
                 ]
               }
@@ -663,10 +664,6 @@ async function serveAvailability(req, res) {
       .filter((result) => result.status === "fulfilled")
       .flatMap((result) => result.value.availabilities || []);
     for (const availability of availabilities) {
-      const segments = availability.appointment_segments || [];
-      if (!segments.some((segment) => segment.team_member_id === teamMemberId)) {
-        continue;
-      }
       const key = `${availability.start_at || ""}:${availability.location_id || ""}:${availability.appointment_segments?.[0]?.team_member_id || ""}`;
       if (!availabilityMap.has(key)) {
         availabilityMap.set(key, availability);
@@ -682,15 +679,21 @@ async function serveAvailability(req, res) {
   }
 }
 
+function toTokyoParts(value) {
+  const jst = new Date(new Date(value).getTime() + 9 * 60 * 60 * 1000);
+  return {
+    dateStr: jst.toISOString().slice(0, 10),
+    hour: jst.getUTCHours()
+  };
+}
+
 function buildHourlySlots(startDate, endDate, availabilities) {
-  const openSet = new Set(
-    availabilities.map(a => {
-      const jst = new Date(new Date(a.start_at).getTime() + 9 * 60 * 60 * 1000);
-      const dateStr = jst.toISOString().slice(0, 10);
-      const hour    = jst.getUTCHours();
-      return `${dateStr}:${hour}`;
-    })
-  );
+  const openSet = new Set();
+  for (const availability of availabilities) {
+    if (!availability.start_at) continue;
+    const { dateStr, hour } = toTokyoParts(availability.start_at);
+    openSet.add(`${dateStr}:${hour}`);
+  }
 
   const result = {};
   const cur = new Date(`${startDate}T00:00:00+09:00`);
