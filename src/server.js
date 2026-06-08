@@ -759,85 +759,102 @@ function buildCalendarHtml() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Noelchair | 空き状況</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+<title>Noelhair | 空き状況</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Serif+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{--tiffany:#81D8D0;--tiffany-light:#b2ece8;--tiffany-dark:#5bbfb7;--bg:#f7fafa;--white:#fff;--ink:#1a2625;--ink-muted:#6b8280;}
+  :root{
+    --tiffany:#81D8D0;
+    --tiffany-deep:#3CA89F;
+    --tiffany-ink:#256A64;
+    --bg:#fbfdfd;
+    --white:#ffffff;
+    --ink:#2b3a38;
+    --ink-soft:#6a7d7b;
+    --line:#dcebe9;
+    --closed-bg:#f1f4f4;
+    --closed-ink:#aebab9;
+  }
   *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
-  .header{background:var(--white);padding:16px 20px 12px;border-bottom:1px solid rgba(129,216,208,0.2);position:sticky;top:0;z-index:30;}
-  .header-inner{max-width:600px;margin:0 auto;}
-  .salon-name{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:300;letter-spacing:0.12em;}
-  .salon-name span{color:var(--tiffany-dark);font-style:italic;}
-  .subtitle{font-size:10px;color:var(--ink-muted);letter-spacing:0.08em;margin-top:2px;}
-  .tabs-wrap{background:var(--white);border-bottom:2px solid rgba(129,216,208,0.2);position:sticky;top:58px;z-index:20;}
-  .tabs{max-width:600px;margin:0 auto;display:flex;}
-  .tab{flex:1;padding:14px 8px 12px;text-align:center;cursor:pointer;font-size:12px;color:var(--ink-muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.2s;}
-  .tab.active{color:var(--tiffany-dark);border-bottom-color:var(--tiffany-dark);}
-  .tab-name-jp{font-size:13px;font-weight:400;}
-  .tab-name-en{font-size:9px;letter-spacing:0.08em;margin-top:1px;opacity:0.7;}
-  .tab-role{font-size:9px;color:var(--tiffany-dark);opacity:0;}
-  .tab.active .tab-role{opacity:1;}
-  .main{max-width:600px;margin:0 auto;padding:14px 16px 40px;}
-  .week-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-  .week-label{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:300;letter-spacing:0.05em;}
-  .nav-btn{width:28px;height:28px;border-radius:50%;border:1px solid var(--tiffany-light);background:transparent;color:var(--tiffany-dark);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
-  .nav-btn:hover{background:var(--tiffany);color:white;}
-  .grid-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;border:1px solid rgba(129,216,208,0.2);}
-  .grid-table{border-collapse:collapse;width:100%;font-size:11px;}
-  .grid-table th{background:var(--white);font-weight:300;padding:7px 4px;text-align:center;border:1px solid rgba(129,216,208,0.15);white-space:nowrap;min-width:42px;}
-  .grid-table th.time-col{min-width:42px;font-size:10px;color:var(--ink-muted);}
-  .grid-table th.sun{color:#e08080;}.grid-table th.sat{color:#6080d0;}.grid-table th.today-h{background:rgba(129,216,208,0.08);}
-  .grid-table th .dnum{font-size:14px;line-height:1.2;}.grid-table th .dname{font-size:9px;opacity:0.7;}
-  .grid-table td{border:1px solid rgba(129,216,208,0.12);text-align:center;height:38px;min-width:42px;transition:background 0.12s;}
-  .grid-table td.time-cell{font-size:10px;color:var(--ink-muted);background:var(--white);padding:0 5px;white-space:nowrap;}
-  .grid-table td.c-closed{background:#f0f0f0;}
-  .grid-table td.c-holiday{background:#faf0f0;}
-  .grid-table td.c-open{background:rgba(129,216,208,0.15);}
-  .grid-table td.c-past{background:#f8f8f8;}
-  .cell-in{display:flex;align-items:center;justify-content:center;height:100%;font-size:13px;}
-  .c-open .cell-in{color:var(--tiffany-dark);}
-  .c-closed .cell-in{color:#ccc;font-size:11px;}
-  .c-holiday .cell-in{color:#dbb;font-size:10px;}
-  .c-past .cell-in{color:#ddd;font-size:11px;}
-  .loading{text-align:center;padding:20px;color:var(--ink-muted);font-size:12px;}
-  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 16px;}
-  .legend-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--ink-muted);}
-  .legend-box{width:13px;height:13px;border-radius:3px;}
-  .lb-open{background:rgba(129,216,208,0.25);border:1px solid rgba(129,216,208,0.5);}
-  .lb-closed{background:#f0f0f0;border:1px solid #ddd;}
-  .lb-holiday{background:#faf0f0;border:1px solid #f0d0d0;}
-  .note{font-size:11px;color:var(--ink-muted);text-align:center;padding:12px 16px;background:rgba(129,216,208,0.06);border-radius:8px;margin-top:4px;line-height:1.6;}
-  .book-link{display:block;margin-top:16px;background:var(--tiffany-dark);color:white;text-align:center;padding:13px;border-radius:10px;font-size:13px;letter-spacing:0.08em;text-decoration:none;transition:all 0.2s;}
-  .book-link:hover{background:var(--tiffany);box-shadow:0 4px 14px rgba(129,216,208,0.35);}
+  body{font-family:'Noto Serif JP',serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.7;}
+  .header{background:var(--white);padding:22px 20px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30;}
+  .header-inner{max-width:640px;margin:0 auto;text-align:center;}
+  .salon-name{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:500;letter-spacing:0.1em;color:var(--ink);}
+  .salon-name span{color:var(--tiffany-deep);font-style:italic;}
+  .subtitle{font-size:12px;color:var(--ink-soft);letter-spacing:0.2em;margin-top:5px;font-weight:500;}
+  .tabs-wrap{background:var(--white);border-bottom:1px solid var(--line);position:sticky;top:76px;z-index:20;}
+  .tabs{max-width:640px;margin:0 auto;display:flex;}
+  .tab{flex:1;padding:16px 8px 14px;text-align:center;cursor:pointer;color:var(--ink-soft);border-bottom:3px solid transparent;margin-bottom:-1px;transition:all 0.25s;}
+  .tab.active{color:var(--tiffany-ink);border-bottom-color:var(--tiffany-deep);background:rgba(129,216,208,0.05);}
+  .tab-name-jp{font-size:18px;font-weight:600;letter-spacing:0.06em;}
+  .tab-name-en{font-size:10px;letter-spacing:0.12em;margin-top:3px;opacity:0.6;font-family:'Cormorant Garamond',serif;font-weight:500;}
+  .main{max-width:640px;margin:0 auto;padding:20px 16px 50px;}
+  .lead{font-size:14px;color:var(--ink);text-align:center;margin-bottom:20px;font-weight:500;}
+  .week-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .week-label{font-size:18px;font-weight:600;letter-spacing:0.03em;color:var(--ink);}
+  .nav-btn{width:42px;height:42px;border-radius:50%;border:1.5px solid var(--tiffany);background:var(--white);color:var(--tiffany-deep);cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+  .nav-btn:hover{background:var(--tiffany-deep);color:white;border-color:var(--tiffany-deep);}
+  .grid-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:14px;border:1.5px solid var(--line);background:var(--white);box-shadow:0 3px 22px rgba(60,168,159,0.07);}
+  .grid-table{border-collapse:separate;border-spacing:0;width:100%;}
+  .grid-table th{background:var(--white);font-weight:600;padding:13px 4px 11px;text-align:center;border-bottom:1.5px solid var(--line);white-space:nowrap;min-width:48px;position:sticky;top:0;}
+  .grid-table th.time-col{min-width:54px;}
+  .grid-table th.sun{color:#d97f7f;}
+  .grid-table th.sat{color:#6f97cf;}
+  .grid-table th .dnum{font-size:21px;line-height:1.1;font-weight:600;}
+  .grid-table th .dname{font-size:12px;opacity:0.7;margin-top:3px;font-weight:500;}
+  .grid-table th.today-h .dnum{color:var(--tiffany-deep);}
+  .grid-table th.today-h .dname{color:var(--tiffany-deep);opacity:1;}
+  .grid-table td{border-bottom:1px solid var(--line);border-left:1px solid var(--line);text-align:center;height:48px;min-width:48px;}
+  .grid-table td.time-cell{font-size:16px;font-weight:600;color:var(--ink);background:var(--white);padding:0 8px;white-space:nowrap;border-left:none;}
+  .grid-table tr:last-child td{border-bottom:none;}
+  .grid-table td.c-open{background:rgba(129,216,208,0.18);}
+  .grid-table td.c-closed{background:var(--closed-bg);}
+  .grid-table td.c-past{background:#fafbfb;}
+  .cell-in{display:flex;align-items:center;justify-content:center;height:100%;font-size:23px;font-weight:600;}
+  .c-open .cell-in{color:var(--tiffany-deep);}
+  .c-closed .cell-in{color:var(--closed-ink);font-size:19px;}
+  .c-past .cell-in{color:#dde5e4;font-size:19px;}
+  .legend{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:20px 0;}
+  .legend-item{display:flex;align-items:center;gap:7px;font-size:14px;color:var(--ink);font-weight:500;}
+  .legend-mark{font-size:21px;font-weight:600;}
+  .legend-mark.open{color:var(--tiffany-deep);}
+  .legend-mark.closed{color:var(--closed-ink);}
+  .note{font-size:13px;color:var(--ink);text-align:left;padding:18px 20px;background:rgba(129,216,208,0.08);border-radius:12px;margin-top:8px;line-height:1.95;border:1px solid var(--line);}
+  .note strong{color:var(--tiffany-ink);font-weight:700;}
+  .book-link{display:block;margin-top:20px;background:var(--tiffany-deep);color:white;text-align:center;padding:18px;border-radius:12px;font-size:17px;letter-spacing:0.08em;text-decoration:none;transition:all 0.25s;font-weight:600;box-shadow:0 4px 14px rgba(60,168,159,0.25);}
+  .book-link:hover{background:var(--tiffany-ink);box-shadow:0 6px 20px rgba(60,168,159,0.35);transform:translateY(-1px);}
 </style>
 </head>
 <body>
 <div class="header"><div class="header-inner">
-  <div class="salon-name">Noel<span>hair</span></div>
-  <div class="subtitle">空き状況 · AVAILABILITY</div>
+  <div class="salon-name">Noël<span>hair</span></div>
+  <div class="subtitle">ご予約 空き状況</div>
 </div></div>
 <div class="tabs-wrap"><div class="tabs">
   <div class="tab active" id="tab-takeshi" onclick="switchStaff('takeshi')">
-    <div class="tab-name-jp">二瓶 武士</div><div class="tab-name-en">TAKESHI NIHEI</div><div class="tab-role">Owner Stylist</div>
+    <div class="tab-name-jp">二瓶 武士</div><div class="tab-name-en">TAKESHI</div>
   </div>
   <div class="tab" id="tab-naoko" onclick="switchStaff('naoko')">
-    <div class="tab-name-jp">NAOKO</div><div class="tab-name-en">NAOKO</div><div class="tab-role">Stylist</div>
+    <div class="tab-name-jp">NAOKO</div><div class="tab-name-en">NAOKO</div>
   </div>
 </div></div>
 <div class="main">
+  <p class="lead">ご希望の担当者を選び、空き状況をご確認ください。</p>
   <div class="week-nav">
     <button class="nav-btn" onclick="changeWeek(-1)">&#x2039;</button>
     <div class="week-label" id="weekLabel"></div>
     <button class="nav-btn" onclick="changeWeek(1)">&#x203a;</button>
   </div>
-  <div class="grid-wrap"><table class="grid-table" id="gridTable"><tbody><tr><td class="loading" colspan="8">読み込み中...</td></tr></tbody></table></div>
+  <div class="grid-wrap"><table class="grid-table" id="gridTable"><tbody><tr><td colspan="8" style="padding:24px;text-align:center;color:#6a7d7b;">読み込み中...</td></tr></tbody></table></div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-box lb-open"></div>空きあり</div>
-    <div class="legend-item"><div class="legend-box lb-closed"></div>予約不可</div>
+    <div class="legend-item"><span class="legend-mark open">○</span>予約できます</div>
+    <div class="legend-item"><span class="legend-mark closed">×</span>予約できません</div>
   </div>
-  <div class="note">○の時間帯はご予約いただけます。<br>ご予約はSquareの予約ページからお願いします。</div>
-  <a href="https://squareup.com/appointments/book/LQ2HAT073YS1N" class="book-link" target="_blank">ご予約はこちら →</a>
+  <div class="note">
+    ○の時間帯は、現在ご予約をお受けできる時間です。<br>
+    ただし、この空き状況には<strong>多少の時間差</strong>がございます。ご予約のお手続き中に、別のお客様のご予約が入り満席となる場合がございますので、あらかじめご了承ください。<br>
+    最新の空き状況は、下のご予約ページにてご確認いただけます。
+  </div>
+  <a href="https://noelhair.square.site" class="book-link" target="_blank">ご予約はこちら →</a>
 </div>
 <script>
 var OPEN_HOUR=9,CLOSE_HOUR=19;
@@ -864,7 +881,7 @@ async function loadAndRender(){
   var days=getWeekDates();
   var start=fmt(days[0]),end=fmt(days[6]);
   var cacheKey=currentStaff+start;
-  document.getElementById('gridTable').innerHTML='<tbody><tr><td class="loading" colspan="8">読み込み中...</td></tr></tbody>';
+  document.getElementById('gridTable').innerHTML='<tbody><tr><td colspan="8" style="padding:24px;text-align:center;color:#6a7d7b;">読み込み中...</td></tr></tbody>';
   if(!slotsCache[cacheKey]){
     try{
       var r=await fetch('/api/availability?staff='+currentStaff+'&start='+start+'&end='+end);
@@ -879,7 +896,7 @@ function renderGrid(days,slots){
   var months=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
   var first=days[0],last=days[6];
   document.getElementById('weekLabel').textContent=
-    first.getFullYear()+'年 '+months[first.getMonth()]+' '+first.getDate()+'日 〜 '+months[last.getMonth()]+' '+last.getDate()+'日';
+    months[first.getMonth()]+first.getDate()+'日 〜 '+months[last.getMonth()]+last.getDate()+'日';
   var html='<thead><tr><th class="time-col"></th>';
   days.forEach(function(d){
     var dow=d.getDay();
