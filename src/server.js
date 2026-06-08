@@ -70,6 +70,9 @@ server.listen(config.port, config.host, () => {
   console.log(`LINE x Square booking bot listening on ${config.host}:${config.port}`);
 });
 
+// ============================================================
+// 【維持】LINE 予約確認・来店履歴 ロジック（一切変更なし）
+// ============================================================
 async function handleLineEvent(event) {
   if (event.type !== "message" || event.message?.type !== "text" || !event.replyToken) {
     return;
@@ -193,7 +196,7 @@ function isResetCommand(text) {
 }
 
 function parseIdentity(text) {
-  const match = text.match(/^(.+?)[\s　,、]*(\d{4})$/);
+  const match = text.match(/^(.+?)[\s ,、]*(\d{4})$/);
   if (!match) return null;
   return {
     name: normalizeText(match[1]),
@@ -591,19 +594,25 @@ function loadDotEnv(filePath) {
 }
 
 // ============================================================
-// カレンダー機能（既存コードには手を加えていません）
+// ⚙️ 空き状況カレンダー機能（修正・最適化済み）
 // ============================================================
 
 const CALENDAR_STAFF = {
-  takeshi: { id: "TM4KBBvc9KKU5Auf", name: "二瓶 武士" },
-  naoko:   { id: "TMyoTzCPU06PeMxI", name: "NAOKO" }
+  takeshi: {
+    id: "TM4KBBvc9KKU5Auf",
+    name: "二瓶 武士",
+    serviceVariationId: "A23FMPXKLQ5C45K6Y5NXJYBG" // ★後ほど /api/services で取得した共通の「女性カット(60分)」のIDに書き換えてください
+  },
+  naoko: {
+    id: "TMyoTzCPU06PeMxI",
+    name: "NAOKO",
+    serviceVariationId: "LUCUGMQKRAYIRYZQ2YTKRY42" // ★後ほど /api/services で取得した共通の「女性カット(60分)」のIDに書き換えてください
+  }
 };
-const CALENDAR_OPEN_HOUR  = 10;
+const CALENDAR_LOCATION_ID = "LQ2HAT073YS1N";
+const CALENDAR_OPEN_HOUR  = 9;
 const CALENDAR_CLOSE_HOUR = 19;
 const CALENDAR_CLOSED_DOW = [1, 2]; // 月曜・火曜定休
-const CALENDAR_BREAK_HOURS = [12]; // 昼休み
-// Square オンライン予約ページ
-const SQUARE_BOOKING_URL = "https://squareup.com/appointments/book/LQ2HAT073YS1N";
 
 function serveCalendar(res) {
   const html = buildCalendarHtml();
@@ -611,23 +620,19 @@ function serveCalendar(res) {
   res.end(html);
 }
 
-// サービス（メニュー）一覧とservice_variation_idを取得して、
-// どのスタッフが担当しているかも併せて返す
+// サービス（メニュー）一覧と正確な service_variation_id を取得する確認用API
 async function serveServices(res) {
   try {
-    // 1) カタログからAPPOINTMENTS_SERVICE（予約メニュー）を全部取得
     const catalog = await squareRequest("/v2/catalog/list?types=ITEM", { method: "GET" });
     const items = (catalog.objects || []).filter(
       (o) => o.item_data?.product_type === "APPOINTMENTS_SERVICE"
     );
 
-    // 2) 各メニューのバリエーション（=予約に使うservice_variation_id）を展開
     const services = [];
     for (const item of items) {
       const itemName = item.item_data?.name || "";
       for (const v of item.item_data?.variations || []) {
         const vd = v.item_variation_data || {};
-        // team_member_ids: そのバリエーションを担当できるスタッフ
         services.push({
           service_variation_id: v.id,
           name: itemName + (vd.name && vd.name !== itemName ? ` / ${vd.name}` : ""),
@@ -660,38 +665,49 @@ async function serveAvailability(req, res) {
       return sendJson(res, 400, { error: "start and end required" });
     }
 
-    const teamMemberId = CALENDAR_STAFF[staffKey].id;
+    const staff = CALENDAR_STAFF[staffKey];
+    const teamMemberId = staff.id;
+    const serviceVariationId = staff.serviceVariationId;
 
-    // 既存予約を取得して、予約が入っている時間帯を特定する
-    const startAt = new Date(`${startDate}T00:00:00+09:00`).toISOString();
-    const endAt   = new Date(`${endDate}T23:59:59+09:00`).toISOString();
+    let rangeStart = new Date(`${startDate}T00:00:00+09:00`);
+    const now = new Date();
+    if (rangeStart < now) rangeStart = now;
+    const rangeEnd = new Date(`${endDate}T23:59:59+09:00`);
 
-    const params = new URLSearchParams({
-      start_at_min: startAt,
-      start_at_max: endAt,
-      limit: "100"
+    const body = {
+      query: {
+        filter: {
+          start_at_range: {
+            start_at: rangeStart.toISOString(),
+            end_at: rangeEnd.toISOString()
+          },
+          location_id: CALENDAR_LOCATION_ID,
+          segment_filters: [
+            {
+              service_variation_id: serviceVariationId,
+              team_member_id_filter: { any: [teamMemberId] }
+            }
+          ]
+        }
+      }
+    };
+
+    const result = await squareRequest("/v2/bookings/availability/search", {
+      method: "POST",
+      body
     });
 
-    const result = await squareRequest(`/v2/bookings?${params.toString()}`, { method: "GET" });
-    const bookings = (result.bookings || []).filter(b =>
-      ["ACCEPTED", "PENDING"].includes(b.status) &&
-      b.appointment_segments?.some(s => s.team_member_id === teamMemberId)
-    );
+    const availabilities = result.availabilities || [];
 
-    // 予約が入っている時間帯をセットに入れる
-    const bookedSet = new Set();
-    for (const booking of bookings) {
-      const startJst = new Date(new Date(booking.start_at).getTime() + 9 * 60 * 60 * 1000);
-      const dateStr  = startJst.toISOString().slice(0, 10);
-      const startH   = startJst.getUTCHours();
-      const durationMins = booking.appointment_segments?.reduce((s, seg) => s + (seg.duration_minutes || 0), 0) || 60;
-      const durationH = Math.ceil(durationMins / 60);
-      for (let i = 0; i < durationH; i++) {
-        bookedSet.add(`${dateStr}:${startH + i}`);
-      }
+    const openSet = new Set();
+    for (const a of availabilities) {
+      if (!a.start_at) continue;
+      const jst = new Date(new Date(a.start_at).getTime() + 9 * 60 * 60 * 1000);
+      const dateStr = jst.toISOString().slice(0, 10);
+      const hour    = jst.getUTCHours();
+      openSet.add(`${dateStr}:${hour}`);
     }
 
-    // 日付×時間のスロットを作る
     const slots = {};
     const cur = new Date(`${startDate}T00:00:00+09:00`);
     const end = new Date(`${endDate}T00:00:00+09:00`);
@@ -706,19 +722,23 @@ async function serveAvailability(req, res) {
       if (!slots[dateStr]) slots[dateStr] = {};
 
       for (let h = CALENDAR_OPEN_HOUR; h < CALENDAR_CLOSE_HOUR; h++) {
+        // ★定休日(isClosed)も「holiday」ではなく一律「closed（×）」として集約します
         if (isClosed) {
-          slots[dateStr][h] = "holiday";
-        } else if (CALENDAR_BREAK_HOURS.includes(h) || bookedSet.has(`${dateStr}:${h}`)) {
           slots[dateStr][h] = "closed";
-        } else {
+        } else if (openSet.has(`${dateStr}:${h}`)) {
           slots[dateStr][h] = "open";
+        } else {
+          slots[dateStr][h] = "closed";
         }
       }
 
       cur.setDate(cur.getDate() + 1);
     }
 
-    sendJson(res, 200, { slots });
+    sendJson(res, 200, {
+      slots,
+      debug: { staff: staffKey, availabilityCount: availabilities.length }
+    });
 
   } catch (err) {
     console.error("availability error:", err);
@@ -765,13 +785,11 @@ function buildCalendarHtml() {
   .grid-table td{border:1px solid rgba(129,216,208,0.12);text-align:center;height:38px;min-width:42px;transition:background 0.12s;}
   .grid-table td.time-cell{font-size:10px;color:var(--ink-muted);background:var(--white);padding:0 5px;white-space:nowrap;}
   .grid-table td.c-closed{background:#f0f0f0;}
-  .grid-table td.c-holiday{background:#faf0f0;}
   .grid-table td.c-open{background:rgba(129,216,208,0.15);}
   .grid-table td.c-past{background:#f8f8f8;}
   .cell-in{display:flex;align-items:center;justify-content:center;height:100%;font-size:13px;}
   .c-open .cell-in{color:var(--tiffany-dark);}
   .c-closed .cell-in{color:#ccc;font-size:11px;}
-  .c-holiday .cell-in{color:#dbb;font-size:10px;}
   .c-past .cell-in{color:#ddd;font-size:11px;}
   .loading{text-align:center;padding:20px;color:var(--ink-muted);font-size:12px;}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 16px;}
@@ -779,7 +797,6 @@ function buildCalendarHtml() {
   .legend-box{width:13px;height:13px;border-radius:3px;}
   .lb-open{background:rgba(129,216,208,0.25);border:1px solid rgba(129,216,208,0.5);}
   .lb-closed{background:#f0f0f0;border:1px solid #ddd;}
-  .lb-holiday{background:#faf0f0;border:1px solid #f0d0d0;}
   .note{font-size:11px;color:var(--ink-muted);text-align:center;padding:12px 16px;background:rgba(129,216,208,0.06);border-radius:8px;margin-top:4px;line-height:1.6;}
   .book-link{display:block;margin-top:16px;background:var(--tiffany-dark);color:white;text-align:center;padding:13px;border-radius:10px;font-size:13px;letter-spacing:0.08em;text-decoration:none;transition:all 0.2s;}
   .book-link:hover{background:var(--tiffany);box-shadow:0 4px 14px rgba(129,216,208,0.35);}
@@ -806,15 +823,14 @@ function buildCalendarHtml() {
   </div>
   <div class="grid-wrap"><table class="grid-table" id="gridTable"><tbody><tr><td class="loading" colspan="8">読み込み中...</td></tr></tbody></table></div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-box lb-open"></div>空きあり</div>
-    <div class="legend-item"><div class="legend-box lb-closed"></div>予約あり</div>
-    <div class="legend-item"><div class="legend-box lb-holiday"></div>定休 / 休み</div>
+    <div class="legend-item"><div class="legend-box lb-open"></div>空きあり（○）</div>
+    <div class="legend-item"><div class="legend-box lb-closed"></div>予約不可（×）</div>
   </div>
   <div class="note">○の時間帯はご予約いただけます。<br>ご予約はSquareの予約ページからお願いします。</div>
   <a href="https://squareup.com/appointments/book/LQ2HAT073YS1N" class="book-link" target="_blank">ご予約はこちら →</a>
 </div>
 <script>
-var OPEN_HOUR=10,CLOSE_HOUR=19;
+var OPEN_HOUR=9,CLOSE_HOUR=19;
 var today=new Date();today.setHours(0,0,0,0);
 var currentStaff='takeshi',weekOffset=0,slotsCache={};
 function switchStaff(s){
@@ -871,7 +887,6 @@ function renderGrid(days,slots){
       var status=isPast?'past':((slots[ds]&&slots[ds][h])||'closed');
       var cls,icon;
       if(status==='past'){cls='c-past';icon='—';}
-      else if(status==='holiday'){cls='c-holiday';icon='休';}
       else if(status==='open'){cls='c-open';icon='○';}
       else{cls='c-closed';icon='×';}
       html+='<td class="'+cls+'"><div class="cell-in">'+icon+'</div></td>';
