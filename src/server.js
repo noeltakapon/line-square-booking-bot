@@ -603,8 +603,8 @@ const CALENDAR_SERVICE_VARIATION_IDS = [
   "ZPEQ33L4T5Y2UATQYKA7M6Y7",
   "HT6N43VJPKQ4IE6GCGXQ5TFK"
 ];
-const CALENDAR_OPEN_HOUR  = 10;
-const CALENDAR_CLOSE_HOUR = 19;
+const CALENDAR_OPEN_HOUR  = 9;
+const CALENDAR_CLOSE_HOUR = 20;
 const CALENDAR_CLOSED_DOW = 2; // 火曜定休
 
 function serveCalendar(res) {
@@ -859,7 +859,7 @@ const MENUS=[
   {id:'cut_color_perm',name:'メンズカット＆カラー＆パーマ',cat:'メンズ',duration:180,price:'¥12,600〜¥13,700'},
   {id:'mesh',name:'メンズ限定 カット＆ホワイトメッシュ',cat:'メンズ',duration:180,price:'¥16,000'},
 ];
-const OPEN_HOUR=10,CLOSE_HOUR=19;
+const OPEN_HOUR=9,CLOSE_HOUR=20;
 const today=new Date();today.setHours(0,0,0,0);
 let currentStaff='takeshi',weekOffset=0,selectedSlot=null,selectedMenu=null,slotsCache={};
 
