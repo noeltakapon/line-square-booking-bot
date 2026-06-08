@@ -729,9 +729,9 @@ async function serveAvailability(req, res) {
 
       if (!slots[dateStr]) slots[dateStr] = {};
 
-      for (let h = CALENDAR_OPEN_HOUR; h < CALENDAR_CLOSE_HOUR; h++) {
+      for (let h = CALENDAR_OPEN_HOUR; h <= CALENDAR_CLOSE_HOUR; h++) {
         if (isClosed) {
-          slots[dateStr][h] = "holiday";
+          slots[dateStr][h] = "closed";
         } else if (openSet.has(`${dateStr}:${h}`)) {
           slots[dateStr][h] = "open";
         } else {
@@ -834,8 +834,7 @@ function buildCalendarHtml() {
   <div class="grid-wrap"><table class="grid-table" id="gridTable"><tbody><tr><td class="loading" colspan="8">読み込み中...</td></tr></tbody></table></div>
   <div class="legend">
     <div class="legend-item"><div class="legend-box lb-open"></div>空きあり</div>
-    <div class="legend-item"><div class="legend-box lb-closed"></div>予約あり</div>
-    <div class="legend-item"><div class="legend-box lb-holiday"></div>定休 / 休み</div>
+    <div class="legend-item"><div class="legend-box lb-closed"></div>予約不可</div>
   </div>
   <div class="note">○の時間帯はご予約いただけます。<br>ご予約はSquareの予約ページからお願いします。</div>
   <a href="https://squareup.com/appointments/book/LQ2HAT073YS1N" class="book-link" target="_blank">ご予約はこちら →</a>
@@ -890,7 +889,7 @@ function renderGrid(days,slots){
   });
   html+='</tr></thead><tbody>';
   var nowHour=new Date().getHours();
-  for(var h=OPEN_HOUR;h<CLOSE_HOUR;h++){
+  for(var h=OPEN_HOUR;h<=CLOSE_HOUR;h++){
     html+='<tr><td class="time-cell">'+String(h).padStart(2,'0')+':00</td>';
     days.forEach(function(d){
       var ds=fmt(d);
@@ -898,7 +897,6 @@ function renderGrid(days,slots){
       var status=isPast?'past':((slots[ds]&&slots[ds][h])||'closed');
       var cls,icon;
       if(status==='past'){cls='c-past';icon='—';}
-      else if(status==='holiday'){cls='c-holiday';icon='休';}
       else if(status==='open'){cls='c-open';icon='○';}
       else{cls='c-closed';icon='×';}
       html+='<td class="'+cls+'"><div class="cell-in">'+icon+'</div></td>';
