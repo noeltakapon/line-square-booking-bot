@@ -892,11 +892,14 @@ function showMenuPanel(ds,hour,avail){
 }
 function renderMenuList(avail){
   const maxMins=avail*60;
-  document.getElementById('menuList').innerHTML=MENUS.map(m=>{
+  document.getElementById('menuList').innerHTML=MENUS.map(function(m){
     const fits=m.duration<=maxMins;
-    return '<div class="menu-item'+(selectedMenu&&selectedMenu.id===m.id?' selected':'')+(fits?'':' menu-unavail')+'"'+(fits?' onclick="selectMenu(\''+m.id+'\')"':'')+'>'+
+    const sel=(selectedMenu&&selectedMenu.id===m.id)?' selected':'';
+    const una=fits?'':' menu-unavail';
+    const clk=fits?' onclick="selectMenu('+JSON.stringify(m.id)+')"':'';
+    return '<div class="menu-item'+sel+una+'"'+clk+'>'+
       '<div><div class="menu-item-name">'+m.name+'</div><div class="menu-item-cat">'+m.cat+'</div></div>'+
-      '<div class="menu-item-right"><div class="menu-item-price">'+m.price+'</div><div class="menu-item-time">⏱ '+fmtDur(m.duration)+'</div></div>'+
+      '<div class="menu-item-right"><div class="menu-item-price">'+m.price+'</div><div class="menu-item-time">'+fmtDur(m.duration)+'</div></div>'+
     '</div>';
   }).join('');
 }
