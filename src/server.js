@@ -609,7 +609,12 @@ const CALENDAR_CLOSED_DOW = 2; // 火曜定休
 
 function serveCalendar(res) {
   const html = buildCalendarHtml();
-  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.writeHead(200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0"
+  });
   res.end(html);
 }
 
@@ -888,7 +893,7 @@ async function loadAndRender(){
   document.getElementById('gridTable').innerHTML='<tbody><tr><td class="loading" colspan="8">読み込み中...</td></tr></tbody>';
   if(!slotsCache[cacheKey]){
     try{
-      const r=await fetch('/api/availability?staff='+currentStaff+'&start='+start+'&end='+end);
+      const r=await fetch('/api/availability?staff='+currentStaff+'&start='+start+'&end='+end+'&t='+Date.now(),{cache:'no-store'});
       const data=await r.json();
       slotsCache[cacheKey]=data.slots||{};
     }catch(e){slotsCache[cacheKey]={};}
