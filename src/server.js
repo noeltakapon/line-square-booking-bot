@@ -915,11 +915,14 @@ function renderMenuList(avail){
   const maxMins=avail*60;
   document.getElementById('menuList').innerHTML=MENUS.map(m=>{
     const fits=m.duration<=maxMins;
-    return '<div class="menu-item'+(selectedMenu&&selectedMenu.id===m.id?' selected':'')+(fits?'':' menu-unavail')+'"'+(fits?' onclick="selectMenu(\''+m.id+'\')"':'')+'>'+
+    return '<div class="menu-item'+(selectedMenu&&selectedMenu.id===m.id?' selected':'')+(fits?'':' menu-unavail')+'"'+(fits?' data-menu-id="'+m.id+'"':'')+'>'+
       '<div><div class="menu-item-name">'+m.name+'</div><div class="menu-item-cat">'+m.cat+'</div></div>'+
       '<div class="menu-item-right"><div class="menu-item-price">'+m.price+'</div><div class="menu-item-time">⏱ '+fmtDur(m.duration)+'</div></div>'+
     '</div>';
   }).join('');
+  document.querySelectorAll('#menuList .menu-item[data-menu-id]').forEach(el=>{
+    el.addEventListener('click',()=>selectMenu(el.dataset.menuId));
+  });
 }
 function selectMenu(id){
   selectedMenu=MENUS.find(m=>m.id===id);
