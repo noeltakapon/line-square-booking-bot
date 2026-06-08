@@ -594,19 +594,19 @@ function loadDotEnv(filePath) {
 }
 
 // ============================================================
-// ⚙️ 空き状況カレンダー機能（修正・最適化済み）
+// ⚙️ 空き状況カレンダー機能（共通本物ID組込版）
 // ============================================================
 
 const CALENDAR_STAFF = {
   takeshi: {
     id: "TM4KBBvc9KKU5Auf",
     name: "二瓶 武士",
-    serviceVariationId: "A23FMPXKLQ5C45K6Y5NXJYBG" // ★後ほど /api/services で取得した共通の「女性カット(60分)」のIDに書き換えてください
+    serviceVariationId: "LUCUGMQKRAYIRYZQ2YTKRY42" // ★解析済みの共通レディースカットIDを適用
   },
   naoko: {
     id: "TMyoTzCPU06PeMxI",
     name: "NAOKO",
-    serviceVariationId: "LUCUGMQKRAYIRYZQ2YTKRY42" // ★後ほど /api/services で取得した共通の「女性カット(60分)」のIDに書き換えてください
+    serviceVariationId: "LUCUGMQKRAYIRYZQ2YTKRY42" // ★解析済みの共通レディースカットIDを適用
   }
 };
 const CALENDAR_LOCATION_ID = "LQ2HAT073YS1N";
@@ -722,7 +722,6 @@ async function serveAvailability(req, res) {
       if (!slots[dateStr]) slots[dateStr] = {};
 
       for (let h = CALENDAR_OPEN_HOUR; h < CALENDAR_CLOSE_HOUR; h++) {
-        // ★定休日(isClosed)も「holiday」ではなく一律「closed（×）」として集約します
         if (isClosed) {
           slots[dateStr][h] = "closed";
         } else if (openSet.has(`${dateStr}:${h}`)) {
@@ -752,7 +751,7 @@ function buildCalendarHtml() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Noelchair | 空き状況</title>
+<title>Noelhair | 空き状況</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
 <style>
   :root{--tiffany:#81D8D0;--tiffany-light:#b2ece8;--tiffany-dark:#5bbfb7;--bg:#f7fafa;--white:#fff;--ink:#1a2625;--ink-muted:#6b8280;}
