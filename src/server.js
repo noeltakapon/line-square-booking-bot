@@ -592,8 +592,8 @@ function loadDotEnv(filePath) {
 
 const CALENDAR_LOCATION_ID = "LQ2HAT073YS1N";
 const CALENDAR_STAFF = {
-  takeshi: { id: "noeltakeshi", name: "二瓶 武士" },
-  naoko:   { id: "noelnaoko",  name: "NAOKO" }
+  takeshi: { id: "TM4KBBvc9KKU5Auf", name: "二瓶 武士" },
+  naoko:   { id: "TMyoTzCPU06PeMxI",  name: "NAOKO" }
 };
 const CALENDAR_OPEN_HOUR  = 10;
 const CALENDAR_CLOSE_HOUR = 19;
@@ -892,14 +892,11 @@ function showMenuPanel(ds,hour,avail){
 }
 function renderMenuList(avail){
   const maxMins=avail*60;
-  document.getElementById('menuList').innerHTML=MENUS.map(function(m){
+  document.getElementById('menuList').innerHTML=MENUS.map(m=>{
     const fits=m.duration<=maxMins;
-    const sel=(selectedMenu&&selectedMenu.id===m.id)?' selected':'';
-    const una=fits?'':' menu-unavail';
-    const clk=fits?' onclick="selectMenu('+JSON.stringify(m.id)+')"':'';
-    return '<div class="menu-item'+sel+una+'"'+clk+'>'+
+    return '<div class="menu-item'+(selectedMenu&&selectedMenu.id===m.id?' selected':'')+(fits?'':' menu-unavail')+'"'+(fits?' onclick="selectMenu(\''+m.id+'\')"':'')+'>'+
       '<div><div class="menu-item-name">'+m.name+'</div><div class="menu-item-cat">'+m.cat+'</div></div>'+
-      '<div class="menu-item-right"><div class="menu-item-price">'+m.price+'</div><div class="menu-item-time">'+fmtDur(m.duration)+'</div></div>'+
+      '<div class="menu-item-right"><div class="menu-item-price">'+m.price+'</div><div class="menu-item-time">⏱ '+fmtDur(m.duration)+'</div></div>'+
     '</div>';
   }).join('');
 }
