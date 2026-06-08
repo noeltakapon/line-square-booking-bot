@@ -631,7 +631,7 @@ async function serveAvailability(req, res) {
     const startAt = new Date(`${startDate}T${String(CALENDAR_OPEN_HOUR).padStart(2, "0")}:00:00+09:00`).toISOString();
     const endAt = new Date(`${endDate}T${String(CALENDAR_CLOSE_HOUR).padStart(2, "0")}:00:00+09:00`).toISOString();
 
-    const results = await Promise.all(
+    const results = await Promise.allSettled(
       CALENDAR_SERVICE_VARIATION_IDS.map((serviceVariationId) =>
         squareRequest("/v2/bookings/availability/search", {
           method: "POST",
@@ -645,8 +645,7 @@ async function serveAvailability(req, res) {
                 location_id: CALENDAR_LOCATION_ID,
                 segment_filters: [
                   {
-                    service_variation_id: serviceVariationId,
-                    team_member_id_filter: { any: [teamMemberId] }
+                    service_variation_id: serviceVariationId
                   }
                 ]
               }
@@ -657,7 +656,17 @@ async function serveAvailability(req, res) {
     );
 
     const availabilityMap = new Map();
-    for (const availability of results.flatMap((result) => result.availabilities || [])) {
+    for (const failed of results.filter((result) => result.status === "rejected")) {
+      console.warn("availability service search skipped:", failed.reason?.message || failed.reason);
+    }
+    const availabilities = results
+      .filter((result) => result.status === "fulfilled")
+      .flatMap((result) => result.value.availabilities || []);
+    for (const availability of availabilities) {
+      const segments = availability.appointment_segments || [];
+      if (!segments.some((segment) => segment.team_member_id === teamMemberId)) {
+        continue;
+      }
       const key = `${availability.start_at || ""}:${availability.location_id || ""}:${availability.appointment_segments?.[0]?.team_member_id || ""}`;
       if (!availabilityMap.has(key)) {
         availabilityMap.set(key, availability);
