@@ -841,7 +841,8 @@ function buildCalendarHtml() {
   </div>
   <div class="note">
     ○の時間帯は、現在ご予約をお受けできる時間です。<br>
-    ただし、この空き状況には<strong>多少の時間差</strong>がございます。ご予約のお手続き中に、別のお客様のご予約が入り満席となる場合がございますので、あらかじめご了承ください。<br>
+    こちらのカレンダーは<strong>約1ヶ月先まで</strong>表示しております。<br>
+    なお、この空き状況には<strong>多少の時間差</strong>がございます。ご予約のお手続き中に、別のお客様のご予約が入り満席となる場合がございますので、あらかじめご了承ください。<br>
     最新の空き状況は、下のご予約ページにてご確認いただけます。
   </div>
   <a href="https://noelhair.square.site" class="book-link" target="_blank">ご予約はこちら →</a>
