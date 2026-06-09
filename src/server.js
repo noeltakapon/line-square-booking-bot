@@ -742,15 +742,7 @@ async function serveAvailability(req, res) {
       cur.setDate(cur.getDate() + 1);
     }
 
-    sendJson(res, 200, {
-      slots,
-      debug: {
-        staff: staffKey,
-        availabilityCount: availabilities.length,
-        rawStartAts: availabilities.slice(0, 10).map(a => a.start_at),
-        openSlots: [...openSet]
-      }
-    });
+    sendJson(res, 200, { slots });
 
   } catch (err) {
     console.error("availability error:", err);
