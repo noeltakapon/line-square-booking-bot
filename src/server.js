@@ -758,10 +758,10 @@ function buildCalendarHtml() {
     --tiffany:#81D8D0;
     --tiffany-deep:#3CA89F;
     --tiffany-ink:#256A64;
-    --bg:#fbfdfd;
+    --bg:#F7F5EF;
     --white:#ffffff;
-    --ink:#1a2624;
-    --ink-soft:#4a5d5b;
+    --ink:#111111;
+    --ink-soft:#333333;
     --line:#dcebe9;
     --closed-bg:#f1f4f4;
     --closed-ink:#aebab9;
