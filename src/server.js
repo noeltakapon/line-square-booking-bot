@@ -760,8 +760,8 @@ function buildCalendarHtml() {
     --tiffany-ink:#256A64;
     --bg:#fbfdfd;
     --white:#ffffff;
-    --ink:#2b3a38;
-    --ink-soft:#6a7d7b;
+    --ink:#1a2624;
+    --ink-soft:#4a5d5b;
     --line:#dcebe9;
     --closed-bg:#f1f4f4;
     --closed-ink:#aebab9;
@@ -808,20 +808,20 @@ function buildCalendarHtml() {
   .legend-mark{font-size:18px;font-weight:600;}
   .legend-mark.open{color:var(--tiffany-deep);}
   .legend-mark.closed{color:var(--closed-ink);}
-  .note{font-size:12px;color:var(--ink);text-align:left;padding:16px 18px;background:rgba(129,216,208,0.08);border-radius:11px;margin:0 4px;line-height:1.9;border:1px solid var(--line);}
+  .note{font-size:13px;color:var(--ink);text-align:left;padding:16px 18px;background:rgba(129,216,208,0.08);border-radius:11px;margin:0 4px;line-height:1.95;border:1px solid var(--line);font-weight:500;}
   .note strong{color:var(--tiffany-ink);font-weight:700;}
   .book-link{display:block;margin:18px 4px 0;background:var(--tiffany);color:#ffffff;text-align:center;padding:18px;border-radius:12px;font-size:17px;letter-spacing:0.08em;text-decoration:none;transition:all 0.25s;font-weight:600;box-shadow:0 4px 16px rgba(129,216,208,0.45);}
   .book-link:hover{background:#6fcdc4;box-shadow:0 6px 22px rgba(129,216,208,0.55);transform:translateY(-1px);}
   .mt{background:var(--white);border:1px solid var(--line);border-radius:13px;padding:17px 17px 15px;margin:0 4px 14px;}
   .mt-ttl{font-size:14px;font-weight:700;color:var(--tiffany-ink);margin-bottom:5px;text-align:center;}
-  .mt-sub{font-size:11.5px;color:var(--ink-soft);text-align:center;margin-bottom:14px;}
+  .mt-sub{font-size:12px;color:var(--ink-soft);text-align:center;margin-bottom:14px;}
   .mt-item{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px dashed var(--line);}
   .mt-item:last-child{border-bottom:none;}
   .mt-marks{flex-shrink:0;display:flex;gap:3px;width:80px;}
   .mt-marks span{width:23px;height:23px;border-radius:50%;background:rgba(129,216,208,0.22);color:var(--tiffany-deep);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;}
   .mt-name{font-size:14px;font-weight:500;flex:1;}
   .mt-time{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
-  .mt-ex{font-size:12px;color:var(--ink-soft);text-align:center;margin-top:13px;line-height:1.8;padding-top:13px;border-top:1px solid var(--line);}
+  .mt-ex{font-size:12.5px;color:var(--ink);text-align:center;margin-top:13px;line-height:1.85;padding-top:13px;border-top:1px solid var(--line);font-weight:500;}
   .mt-ex b{color:var(--tiffany-ink);font-weight:600;}
 </style>
 </head>
