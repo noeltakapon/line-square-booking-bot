@@ -609,7 +609,6 @@ const CALENDAR_STAFF = {
 const CALENDAR_LOCATION_ID = "LQ2HAT073YS1N";
 const CALENDAR_OPEN_HOUR  = 9;
 const CALENDAR_CLOSE_HOUR = 19;
-const CALENDAR_CLOSED_DOW = [1, 2]; // 月曜・火曜定休
 // Square オンライン予約ページ
 const SQUARE_BOOKING_URL = "https://squareup.com/appointments/book/LQ2HAT073YS1N";
 
@@ -724,15 +723,11 @@ async function serveAvailability(req, res) {
     while (cur < end) {
       const jst     = new Date(cur.getTime() + 9 * 60 * 60 * 1000);
       const dateStr = jst.toISOString().slice(0, 10);
-      const dow     = jst.getUTCDay();
-      const isClosed = CALENDAR_CLOSED_DOW.includes(dow);
 
       if (!slots[dateStr]) slots[dateStr] = {};
 
       for (let h = CALENDAR_OPEN_HOUR; h <= CALENDAR_CLOSE_HOUR; h++) {
-        if (isClosed) {
-          slots[dateStr][h] = "closed";
-        } else if (openSet.has(`${dateStr}:${h}`)) {
+        if (openSet.has(`${dateStr}:${h}`)) {
           slots[dateStr][h] = "open";
         } else {
           slots[dateStr][h] = "closed";
