@@ -724,7 +724,7 @@ async function serveAvailability(req, res) {
     while (cur < end) {
       const jst     = new Date(cur.getTime() + 9 * 60 * 60 * 1000);
       const dateStr = jst.toISOString().slice(0, 10);
-      const dow     = cur.getDay();
+      const dow     = jst.getUTCDay();
       const isClosed = CALENDAR_CLOSED_DOW.includes(dow);
 
       if (!slots[dateStr]) slots[dateStr] = {};
@@ -744,7 +744,12 @@ async function serveAvailability(req, res) {
 
     sendJson(res, 200, {
       slots,
-      debug: { staff: staffKey, availabilityCount: availabilities.length }
+      debug: {
+        staff: staffKey,
+        availabilityCount: availabilities.length,
+        rawStartAts: availabilities.slice(0, 10).map(a => a.start_at),
+        openSlots: [...openSet]
+      }
     });
 
   } catch (err) {
