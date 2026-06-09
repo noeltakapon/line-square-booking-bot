@@ -812,6 +812,17 @@ function buildCalendarHtml() {
   .note strong{color:var(--tiffany-ink);font-weight:700;}
   .book-link{display:block;margin:18px 4px 0;background:var(--tiffany);color:#ffffff;text-align:center;padding:18px;border-radius:12px;font-size:17px;letter-spacing:0.08em;text-decoration:none;transition:all 0.25s;font-weight:600;box-shadow:0 4px 16px rgba(129,216,208,0.45);}
   .book-link:hover{background:#6fcdc4;box-shadow:0 6px 22px rgba(129,216,208,0.55);transform:translateY(-1px);}
+  .mt{background:var(--white);border:1px solid var(--line);border-radius:13px;padding:17px 17px 15px;margin:0 4px 14px;}
+  .mt-ttl{font-size:14px;font-weight:700;color:var(--tiffany-ink);margin-bottom:5px;text-align:center;}
+  .mt-sub{font-size:11.5px;color:var(--ink-soft);text-align:center;margin-bottom:14px;}
+  .mt-item{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px dashed var(--line);}
+  .mt-item:last-child{border-bottom:none;}
+  .mt-marks{flex-shrink:0;display:flex;gap:3px;width:80px;}
+  .mt-marks span{width:23px;height:23px;border-radius:50%;background:rgba(129,216,208,0.22);color:var(--tiffany-deep);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;}
+  .mt-name{font-size:14px;font-weight:500;flex:1;}
+  .mt-time{font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
+  .mt-ex{font-size:12px;color:var(--ink-soft);text-align:center;margin-top:13px;line-height:1.8;padding-top:13px;border-top:1px solid var(--line);}
+  .mt-ex b{color:var(--tiffany-ink);font-weight:600;}
 </style>
 </head>
 <body>
@@ -839,11 +850,35 @@ function buildCalendarHtml() {
     <div class="legend-item"><span class="legend-mark open">○</span>予約できます</div>
     <div class="legend-item"><span class="legend-mark closed">×</span>予約できません</div>
   </div>
+  <div class="mt">
+    <div class="mt-ttl">メニューと空き時間の見かた</div>
+    <div class="mt-sub">○がいくつ続いているかで、入れるメニューがわかります</div>
+    <div class="mt-item">
+      <div class="mt-marks"><span>○</span></div>
+      <div class="mt-name">カット</div>
+      <div class="mt-time">1時間</div>
+    </div>
+    <div class="mt-item">
+      <div class="mt-marks"><span>○</span><span>○</span></div>
+      <div class="mt-name">カット＋カラー</div>
+      <div class="mt-time">2時間</div>
+    </div>
+    <div class="mt-item">
+      <div class="mt-marks"><span>○</span><span>○</span></div>
+      <div class="mt-name">カット＋パーマ</div>
+      <div class="mt-time">2時間</div>
+    </div>
+    <div class="mt-item">
+      <div class="mt-marks"><span>○</span><span>○</span><span>○</span></div>
+      <div class="mt-name">カット＋カラー＋パーマ</div>
+      <div class="mt-time">3時間</div>
+    </div>
+    <div class="mt-ex">例えば、<b>○が2つ続いている</b>時間帯なら、<br>カット＋カラーをご予約いただけます。</div>
+  </div>
   <div class="note">
     ○の時間帯は、現在ご予約をお受けできる時間です。<br>
     こちらのカレンダーは<strong>約1ヶ月先まで</strong>表示しております。<br>
-    なお、この空き状況には<strong>多少の時間差</strong>がございます。ご予約のお手続き中に、別のお客様のご予約が入り満席となる場合がございますので、あらかじめご了承ください。<br>
-    最新の空き状況は、下のご予約ページにてご確認いただけます。
+    なお、この空き状況には<strong>多少の時間差</strong>がございます。ご予約のお手続き中に満席となる場合がございますので、最新は下のご予約ページにてご確認ください。
   </div>
   <a href="https://noelhair.square.site" class="book-link" target="_blank">ご予約はこちら →</a>
 </div>
