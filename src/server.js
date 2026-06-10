@@ -221,7 +221,7 @@ const EMAIL_TEMPLATES = {
 };
 
 async function handleSendEmail(body, res) {
-  const { email, customerName, templateKey, staffId } = body;
+  const { email, customerName, templateKey, staffId, customBody } = body;
 
   if (!email || !customerName || !templateKey) {
     return sendJson(res, 400, { error: "missing parameters" });
@@ -243,7 +243,24 @@ async function handleSendEmail(body, res) {
     booking: config.squareBookingUrl
   };
 
-  const html = template.buildHtml(customerName, urls, staffName);
+  let html;
+  if (customBody) {
+    const escapedBody = customBody
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\n/g, "<br>");
+    html = `
+<div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
+  <div style="text-align:center;margin-bottom:28px;">
+    <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
+  </div>
+  <div style="font-size:15px;line-height:1.9;">${escapedBody}</div>
+  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　${staffName}</p>
+</div>`;
+  } else {
+    html = template.buildHtml(customerName, urls, staffName);
+  }
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
@@ -319,6 +336,8 @@ function serveAdminPage(res) {
   .no-email{font-size:11px;color:#c0806a;margin-top:4px;background:#fff5f2;padding:3px 8px;border-radius:20px;display:inline-block;}
   .visitor-actions{display:flex;gap:8px;align-items:center;}
   .template-select{flex:1;padding:10px 10px;border-radius:8px;border:1.5px solid var(--line);font-size:13px;font-family:'Noto Serif JP',serif;background:var(--white);color:var(--ink);appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%233CA89F' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px;}
+  .edit-btn{padding:10px 16px;background:var(--white);color:var(--tiffany-ink);border:1.5px solid var(--tiffany);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Noto Serif JP',serif;white-space:nowrap;transition:all 0.2s;}
+  .edit-btn:hover{background:rgba(129,216,208,0.1);}
   .send-btn{padding:10px 16px;background:var(--tiffany-deep);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Noto Serif JP',serif;white-space:nowrap;transition:all 0.2s;}
   .send-btn:hover{background:var(--tiffany-ink);}
   .send-btn:disabled{background:#ccc;cursor:not-allowed;}
@@ -326,6 +345,21 @@ function serveAdminPage(res) {
   .empty{text-align:center;padding:50px 20px;color:var(--ink-soft);}
   .empty-icon{font-size:36px;margin-bottom:12px;}
   .reload-btn{display:block;margin:16px auto 0;padding:10px 24px;background:var(--white);border:1.5px solid var(--line);border-radius:8px;font-size:13px;cursor:pointer;font-family:'Noto Serif JP',serif;color:var(--tiffany-ink);font-weight:600;}
+  .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:100;align-items:flex-end;justify-content:center;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--white);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;}
+  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .modal-title{font-size:15px;font-weight:600;color:var(--tiffany-ink);}
+  .modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--ink-soft);padding:0 4px;}
+  .modal-to{font-size:13px;color:var(--ink-soft);margin-bottom:12px;padding:10px 12px;background:var(--bg);border-radius:8px;}
+  .modal-label{font-size:12px;color:var(--ink-soft);margin-bottom:6px;font-weight:600;letter-spacing:0.05em;}
+  .modal-textarea{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:14px;font-size:14px;font-family:'Noto Serif JP',serif;line-height:1.9;color:var(--ink);resize:vertical;min-height:220px;background:var(--white);}
+  .modal-textarea:focus{outline:none;border-color:var(--tiffany);}
+  .modal-actions{display:flex;gap:10px;margin-top:16px;}
+  .modal-cancel{flex:1;padding:13px;background:var(--white);border:1.5px solid var(--line);border-radius:8px;font-size:14px;cursor:pointer;font-family:'Noto Serif JP',serif;color:var(--ink-soft);}
+  .modal-send{flex:2;padding:13px;background:var(--tiffany-deep);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Noto Serif JP',serif;transition:all 0.2s;}
+  .modal-send:hover{background:var(--tiffany-ink);}
+  .modal-send:disabled{background:#ccc;cursor:not-allowed;}
 </style>
 </head>
 <body>
@@ -338,12 +372,50 @@ function serveAdminPage(res) {
   <div id="visitorList"><div class="loading">来店者を確認しています...</div></div>
   <button class="reload-btn" onclick="loadVisitors()">🔄 再読み込み</button>
 </div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">メール内容を確認・編集</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-to" id="modalTo"></div>
+    <div class="modal-label">本文（自由に編集できます）</div>
+    <textarea class="modal-textarea" id="modalBody"></textarea>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="modal-send" id="modalSendBtn" onclick="confirmSend()">この内容で送信する</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const TEMPLATES = ${JSON.stringify(
     Object.fromEntries(Object.entries(EMAIL_TEMPLATES).map(([k, t]) => [k, t.label]))
   )};
 
+const TEMPLATE_BODIES = ${JSON.stringify(
+    Object.fromEntries(Object.entries(EMAIL_TEMPLATES).map(([k, t]) => {
+      const staffName = "二瓶武士";
+      const reviewUrl = "https://g.page/r/CXxYjKYZZaSHEAE/review";
+      const bookingUrl = "https://noelhair.square.site";
+      const previewName = "お客様";
+      const body = t.buildHtml(previewName, { review: reviewUrl, booking: bookingUrl }, staffName);
+      const textBody = body
+        .replace(/<div[^>]*>/g, "").replace(/<\/div>/g, "\n")
+        .replace(/<p[^>]*>/g, "").replace(/<\/p>/g, "\n")
+        .replace(/<a[^>]*>([^<]*)<\/a>/g, "$1")
+        .replace(/<span[^>]*>([^<]*)<\/span>/g, "$1")
+        .replace(/<br\s*\/?>/g, "\n")
+        .replace(/&nbsp;/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      return [k, textBody];
+    }))
+  )};
+
 const sentSet = new Set(JSON.parse(localStorage.getItem('noelhair_sent') || '[]'));
+let currentModal = null;
 
 function saveSent() {
   localStorage.setItem('noelhair_sent', JSON.stringify([...sentSet]));
@@ -386,7 +458,7 @@ async function loadVisitors() {
           <select class="template-select" id="tmpl-\${v.bookingId}">
             \${Object.entries(TEMPLATES).map(([k,l]) => \`<option value="\${k}">\${l}</option>\`).join('')}
           </select>
-          <button class="send-btn" onclick="sendEmail('\${v.bookingId}','\${v.email}','\${v.customerName}','\${v.staffId}')">送信</button>
+          <button class="edit-btn" onclick="openModal('\${v.bookingId}','\${v.email}','\${v.customerName}','\${v.staffId}')">内容を確認・編集</button>
         </div>\` : ''}
         \${isSent ? '<div class="sent-badge">✅ 送信済み</div>' : ''}
       </div>\`;
@@ -397,29 +469,57 @@ async function loadVisitors() {
   }
 }
 
-async function sendEmail(bookingId, email, customerName, staffId) {
+function openModal(bookingId, email, customerName, staffId) {
   const templateKey = document.getElementById('tmpl-' + bookingId).value;
-  const btn = document.querySelector('#card-' + bookingId + ' .send-btn');
+  const staffName = staffId === 'TMyoTzCPU06PeMxI' ? 'NAOKO' : '二瓶武士';
+
+  let bodyText = (TEMPLATE_BODIES[templateKey] || '').replace(/お客様/g, customerName).replace(/二瓶武士/g, staffName);
+
+  currentModal = { bookingId, email, customerName, staffId, templateKey };
+
+  document.getElementById('modalTitle').textContent = customerName + ' 様へのメール';
+  document.getElementById('modalTo').textContent = '宛先：' + email;
+  document.getElementById('modalBody').value = bodyText;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  currentModal = null;
+}
+
+async function confirmSend() {
+  if (!currentModal) return;
+  const btn = document.getElementById('modalSendBtn');
   btn.disabled = true;
   btn.textContent = '送信中...';
+
+  const customBody = document.getElementById('modalBody').value;
 
   try {
     const res = await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, customerName, templateKey, staffId })
+      body: JSON.stringify({
+        email: currentModal.email,
+        customerName: currentModal.customerName,
+        templateKey: currentModal.templateKey,
+        staffId: currentModal.staffId,
+        customBody
+      })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'エラー');
 
-    sentSet.add(bookingId);
+    sentSet.add(currentModal.bookingId);
     saveSent();
-    document.getElementById('card-' + bookingId).classList.add('sent');
-    document.querySelector('#card-' + bookingId + ' .visitor-actions').innerHTML = '<div class="sent-badge">✅ 送信済み</div>';
+    document.getElementById('card-' + currentModal.bookingId).classList.add('sent');
+    document.querySelector('#card-' + currentModal.bookingId + ' .visitor-actions').innerHTML = '<div class="sent-badge">✅ 送信済み</div>';
+    closeModal();
   } catch(e) {
     alert('送信失敗: ' + e.message);
     btn.disabled = false;
-    btn.textContent = '送信';
+    btn.textContent = 'この内容で送信する';
   }
 }
 
