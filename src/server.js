@@ -21,7 +21,11 @@ const config = {
   linksFile: path.resolve(__dirname, "..", process.env.LINKS_FILE || "./data/links.json"),
   redisUrl: process.env.UPSTASH_REDIS_REST_URL || "",
   redisToken: process.env.UPSTASH_REDIS_REST_TOKEN || "",
-  linkKeyPrefix: process.env.LINK_KEY_PREFIX || "line-square-booking"
+  linkKeyPrefix: process.env.LINK_KEY_PREFIX || "line-square-booking",
+  resendApiKey: process.env.RESEND_API_KEY || "",
+  adminPassword: process.env.ADMIN_PASSWORD || "noelhair2024",
+  googleReviewUrl: process.env.GOOGLE_REVIEW_URL || "https://g.page/r/YOUR_GOOGLE_REVIEW_ID/review",
+  squareBookingUrl: process.env.SQUARE_BOOKING_URL || "https://noelhair.square.site"
 };
 const serviceNameCache = new Map();
 
@@ -59,6 +63,24 @@ const server = http.createServer(async (req, res) => {
       return serveServices(res);
     }
 
+    // ============================================================
+    // 管理画面ルート（新規追加）
+    // ============================================================
+
+    if (req.method === "GET" && req.url === "/admin") {
+      return serveAdminPage(res);
+    }
+
+    if (req.method === "GET" && req.url === "/api/today-visitors") {
+      return serveTodayVisitors(res);
+    }
+
+    if (req.method === "POST" && req.url === "/api/send-email") {
+      const rawBody = await readBody(req);
+      const body = JSON.parse(rawBody.toString("utf8"));
+      return handleSendEmail(body, res);
+    }
+
     sendJson(res, 404, { error: "not found" });
   } catch (error) {
     console.error(error);
@@ -69,6 +91,346 @@ const server = http.createServer(async (req, res) => {
 server.listen(config.port, config.host, () => {
   console.log(`LINE x Square booking bot listening on ${config.host}:${config.port}`);
 });
+
+// ============================================================
+// 管理画面：当日来店者取得
+// ============================================================
+
+async function serveTodayVisitors(res) {
+  try {
+    const now = new Date();
+    const jstOffset = 9 * 60 * 60 * 1000;
+    const todayJst = new Date(now.getTime() + jstOffset);
+    const dateStr = todayJst.toISOString().slice(0, 10);
+
+    const startAt = new Date(`${dateStr}T00:00:00+09:00`);
+    const endAt   = new Date(`${dateStr}T23:59:59+09:00`);
+
+    const params = new URLSearchParams({
+      location_id: CALENDAR_LOCATION_ID,
+      start_at_min: startAt.toISOString(),
+      start_at_max: endAt.toISOString(),
+      limit: "100"
+    });
+
+    const result = await squareRequest(`/v2/bookings?${params.toString()}`, { method: "GET" });
+    const bookings = (result.bookings || []).filter(
+      b => !["CANCELLED_BY_CUSTOMER", "CANCELLED_BY_SELLER", "DECLINED"].includes(b.status)
+    );
+
+    // 顧客情報を並行取得
+    const visitors = await Promise.all(bookings.map(async (booking) => {
+      const customerId = booking.customer_id;
+      let customerName = "お名前不明";
+      let email = null;
+
+      if (customerId) {
+        try {
+          const cResult = await squareRequest(`/v2/customers/${customerId}`, { method: "GET" });
+          const c = cResult.customer || {};
+          customerName = [c.family_name, c.given_name].filter(Boolean).join(" ") || c.nickname || c.company_name || "お名前不明";
+          email = c.email_address || null;
+        } catch (e) {
+          console.error("Customer fetch error:", e.message);
+        }
+      }
+
+      const segments = booking.appointment_segments || [];
+      const menuNames = (await Promise.all(segments.map(getServiceName))).filter(Boolean);
+
+      return {
+        bookingId: booking.id,
+        customerId,
+        customerName,
+        email,
+        hasEmail: Boolean(email),
+        startAt: booking.start_at,
+        timeLabel: formatTokyoTime(booking.start_at),
+        menu: menuNames.join("・") || "メニュー不明",
+        status: booking.status
+      };
+    }));
+
+    // 時間順にソート
+    visitors.sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
+
+    sendJson(res, 200, { date: dateStr, visitors });
+  } catch (error) {
+    console.error("today-visitors error:", error);
+    sendJson(res, 500, { error: error.message });
+  }
+}
+
+// ============================================================
+// メール送信
+// ============================================================
+
+const EMAIL_TEMPLATES = {
+  review: {
+    label: "お礼 ＋ 口コミお願い",
+    subject: "本日はありがとうございました｜Noëlhair",
+    buildHtml: (name, urls) => `
+<div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
+  <div style="text-align:center;margin-bottom:28px;">
+    <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
+  </div>
+  <p style="font-size:15px;line-height:1.9;">${name} 様</p>
+  <p style="font-size:15px;line-height:1.9;margin-top:12px;">本日はご来店いただき、ありがとうございました。</p>
+  <p style="font-size:15px;line-height:1.9;margin-top:8px;">またのお越しを心よりお待ちしております。</p>
+  <div style="margin:32px 0;padding:22px;background:#f0faf9;border-radius:10px;text-align:center;border:1px solid #d0ecea;">
+    <p style="font-size:14px;color:#256A64;font-weight:600;margin-bottom:14px;">よろしければ、Googleクチコミをいただけると大変励みになります🙏</p>
+    <a href="${urls.review}" style="display:inline-block;background:#3CA89F;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:600;letter-spacing:0.05em;">クチコミを書く →</a>
+  </div>
+  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　二瓶武士<br>埼玉県鶴ヶ島市</p>
+</div>`
+  },
+  nextvisit: {
+    label: "お礼 ＋ 次回予約のご案内",
+    subject: "本日はありがとうございました｜Noëlhair",
+    buildHtml: (name, urls) => `
+<div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
+  <div style="text-align:center;margin-bottom:28px;">
+    <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
+  </div>
+  <p style="font-size:15px;line-height:1.9;">${name} 様</p>
+  <p style="font-size:15px;line-height:1.9;margin-top:12px;">本日はご来店いただき、ありがとうございました。</p>
+  <p style="font-size:15px;line-height:1.9;margin-top:8px;">またのお越しを心よりお待ちしております。</p>
+  <div style="margin:32px 0;padding:22px;background:#f0faf9;border-radius:10px;text-align:center;border:1px solid #d0ecea;">
+    <p style="font-size:14px;color:#256A64;font-weight:600;margin-bottom:14px;">次回のご予約はこちらからどうぞ。</p>
+    <a href="${urls.booking}" style="display:inline-block;background:#3CA89F;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:600;letter-spacing:0.05em;">次回を予約する →</a>
+  </div>
+  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　二瓶武士<br>埼玉県鶴ヶ島市</p>
+</div>`
+  },
+  thanks: {
+    label: "お礼のみ",
+    subject: "本日はありがとうございました｜Noëlhair",
+    buildHtml: (name, urls) => `
+<div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
+  <div style="text-align:center;margin-bottom:28px;">
+    <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
+  </div>
+  <p style="font-size:15px;line-height:1.9;">${name} 様</p>
+  <p style="font-size:15px;line-height:1.9;margin-top:12px;">本日はご来店いただき、ありがとうございました。</p>
+  <p style="font-size:15px;line-height:1.9;margin-top:8px;">またのお越しを心よりお待ちしております。</p>
+  <p style="font-size:12px;color:#888;text-align:center;margin-top:40px;line-height:1.8;">Noëlhair　二瓶武士<br>埼玉県鶴ヶ島市</p>
+</div>`
+  }
+};
+
+async function handleSendEmail(body, res) {
+  const { email, customerName, templateKey } = body;
+
+  if (!email || !customerName || !templateKey) {
+    return sendJson(res, 400, { error: "missing parameters" });
+  }
+
+  const template = EMAIL_TEMPLATES[templateKey];
+  if (!template) {
+    return sendJson(res, 400, { error: "invalid template" });
+  }
+
+  if (!config.resendApiKey) {
+    return sendJson(res, 500, { error: "RESEND_API_KEY not set" });
+  }
+
+  const urls = {
+    review: config.googleReviewUrl,
+    booking: config.squareBookingUrl
+  };
+
+  const html = template.buildHtml(customerName, urls);
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${config.resendApiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: "Noëlhair 二瓶武士 <noreply@noelhair.com>",
+        to: [email],
+        subject: template.subject,
+        html
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Resend error");
+    }
+
+    console.log(`Email sent to ${email} (template: ${templateKey})`);
+    sendJson(res, 200, { ok: true, id: data.id });
+  } catch (error) {
+    console.error("Email send error:", error);
+    sendJson(res, 500, { error: error.message });
+  }
+}
+
+// ============================================================
+// 管理画面HTML
+// ============================================================
+
+function serveAdminPage(res) {
+  const templateOptions = Object.entries(EMAIL_TEMPLATES)
+    .map(([key, t]) => `<option value="${key}">${t.label}</option>`)
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Noëlhair | 管理</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;1,400&family=Noto+Serif+JP:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --tiffany:#81D8D0;
+    --tiffany-deep:#3CA89F;
+    --tiffany-ink:#256A64;
+    --bg:#F7F5EF;
+    --white:#ffffff;
+    --ink:#111111;
+    --ink-soft:#555;
+    --line:#dce8e6;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Noto Serif JP',serif;background:var(--bg);color:var(--ink);min-height:100vh;max-width:600px;margin:0 auto;-webkit-font-smoothing:antialiased;}
+  .header{background:var(--white);padding:20px 16px 14px;border-bottom:1px solid var(--line);text-align:center;}
+  .salon-name{font-family:'Cormorant Garamond',serif;font-size:26px;letter-spacing:0.08em;}
+  .salon-name em{color:var(--tiffany-deep);font-style:italic;}
+  .subtitle{font-size:11px;color:var(--ink-soft);letter-spacing:0.2em;margin-top:4px;}
+  .main{padding:16px 14px 60px;}
+  .date-label{font-size:18px;font-weight:600;color:var(--tiffany-ink);margin-bottom:14px;text-align:center;}
+  .loading{text-align:center;padding:40px;color:var(--ink-soft);font-size:14px;}
+  .visitor-card{background:var(--white);border-radius:12px;border:1px solid var(--line);padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(60,168,159,0.06);}
+  .visitor-card.sent{opacity:0.5;}
+  .visitor-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;}
+  .visitor-time{font-size:13px;color:var(--tiffany-ink);font-weight:600;white-space:nowrap;padding-top:2px;}
+  .visitor-info{flex:1;}
+  .visitor-name{font-size:17px;font-weight:600;line-height:1.3;}
+  .visitor-menu{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+  .no-email{font-size:11px;color:#c0806a;margin-top:4px;background:#fff5f2;padding:3px 8px;border-radius:20px;display:inline-block;}
+  .visitor-actions{display:flex;gap:8px;align-items:center;}
+  .template-select{flex:1;padding:10px 10px;border-radius:8px;border:1.5px solid var(--line);font-size:13px;font-family:'Noto Serif JP',serif;background:var(--white);color:var(--ink);appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%233CA89F' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px;}
+  .send-btn{padding:10px 16px;background:var(--tiffany-deep);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Noto Serif JP',serif;white-space:nowrap;transition:all 0.2s;}
+  .send-btn:hover{background:var(--tiffany-ink);}
+  .send-btn:disabled{background:#ccc;cursor:not-allowed;}
+  .sent-badge{font-size:12px;color:var(--tiffany-ink);font-weight:600;text-align:right;margin-top:8px;}
+  .empty{text-align:center;padding:50px 20px;color:var(--ink-soft);}
+  .empty-icon{font-size:36px;margin-bottom:12px;}
+  .reload-btn{display:block;margin:16px auto 0;padding:10px 24px;background:var(--white);border:1.5px solid var(--line);border-radius:8px;font-size:13px;cursor:pointer;font-family:'Noto Serif JP',serif;color:var(--tiffany-ink);font-weight:600;}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="salon-name">Noël<em>hair</em></div>
+  <div class="subtitle">来店者メール送信</div>
+</div>
+<div class="main">
+  <div class="date-label" id="dateLabel">読み込み中...</div>
+  <div id="visitorList"><div class="loading">来店者を確認しています...</div></div>
+  <button class="reload-btn" onclick="loadVisitors()">🔄 再読み込み</button>
+</div>
+<script>
+const TEMPLATES = ${JSON.stringify(
+    Object.fromEntries(Object.entries(EMAIL_TEMPLATES).map(([k, t]) => [k, t.label]))
+  )};
+
+const sentSet = new Set(JSON.parse(localStorage.getItem('noelhair_sent') || '[]'));
+
+function saveSent() {
+  localStorage.setItem('noelhair_sent', JSON.stringify([...sentSet]));
+}
+
+async function loadVisitors() {
+  document.getElementById('visitorList').innerHTML = '<div class="loading">来店者を確認しています...</div>';
+  try {
+    const res = await fetch('/api/today-visitors');
+    const data = await res.json();
+
+    const d = new Date();
+    const label = d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日（本日）';
+    document.getElementById('dateLabel').textContent = label;
+
+    if (!data.visitors || data.visitors.length === 0) {
+      document.getElementById('visitorList').innerHTML = \`
+        <div class="empty">
+          <div class="empty-icon">📋</div>
+          <div>本日の来店者はまだいません</div>
+        </div>\`;
+      return;
+    }
+
+    let html = '';
+    data.visitors.forEach(v => {
+      const isSent = sentSet.has(v.bookingId);
+      const hasEmail = v.hasEmail;
+      html += \`<div class="visitor-card\${isSent ? ' sent' : ''}" id="card-\${v.bookingId}">
+        <div class="visitor-top">
+          <div class="visitor-time">\${v.timeLabel}</div>
+          <div class="visitor-info">
+            <div class="visitor-name">\${v.customerName}</div>
+            <div class="visitor-menu">\${v.menu}</div>
+            \${!hasEmail ? '<div class="no-email">メールアドレス未登録</div>' : ''}
+          </div>
+        </div>
+        \${hasEmail && !isSent ? \`
+        <div class="visitor-actions">
+          <select class="template-select" id="tmpl-\${v.bookingId}">
+            \${Object.entries(TEMPLATES).map(([k,l]) => \`<option value="\${k}">\${l}</option>\`).join('')}
+          </select>
+          <button class="send-btn" onclick="sendEmail('\${v.bookingId}','\${v.email}','\${v.customerName}')">送信</button>
+        </div>\` : ''}
+        \${isSent ? '<div class="sent-badge">✅ 送信済み</div>' : ''}
+      </div>\`;
+    });
+    document.getElementById('visitorList').innerHTML = html;
+  } catch(e) {
+    document.getElementById('visitorList').innerHTML = '<div class="loading">読み込みエラー。再読み込みしてください。</div>';
+  }
+}
+
+async function sendEmail(bookingId, email, customerName) {
+  const templateKey = document.getElementById('tmpl-' + bookingId).value;
+  const btn = document.querySelector('#card-' + bookingId + ' .send-btn');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+
+  try {
+    const res = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, customerName, templateKey })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'エラー');
+
+    sentSet.add(bookingId);
+    saveSent();
+    document.getElementById('card-' + bookingId).classList.add('sent');
+    document.querySelector('#card-' + bookingId + ' .visitor-actions').innerHTML = '<div class="sent-badge">✅ 送信済み</div>';
+  } catch(e) {
+    alert('送信失敗: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '送信';
+  }
+}
+
+loadVisitors();
+</script>
+</body>
+</html>`;
+
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
+}
+
+// ============================================================
+// 以下、既存コード（変更なし）
+// ============================================================
 
 async function handleLineEvent(event) {
   if (event.type !== "message" || event.message?.type !== "text" || !event.replyToken) {
@@ -368,6 +730,14 @@ function formatTokyoDate(value) {
   }).format(new Date(value));
 }
 
+function formatTokyoTime(value) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 async function squareRequest(endpoint, options) {
   if (!config.squareAccessToken) {
     throw new Error("SQUARE_ACCESS_TOKEN is not set");
@@ -598,18 +968,17 @@ const CALENDAR_STAFF = {
   takeshi: {
     id: "TM4KBBvc9KKU5Auf",
     name: "二瓶 武士",
-    serviceVariationId: "A23FMPXKLQ5C45K6Y5NXJYBG" // メンズカット60分
+    serviceVariationId: "A23FMPXKLQ5C45K6Y5NXJYBG"
   },
   naoko: {
     id: "TMyoTzCPU06PeMxI",
     name: "NAOKO",
-    serviceVariationId: "LUCUGMQKRAYIRYZQ2YTKRY42" // レディースカット60分
+    serviceVariationId: "LUCUGMQKRAYIRYZQ2YTKRY42"
   }
 };
 const CALENDAR_LOCATION_ID = "LQ2HAT073YS1N";
 const CALENDAR_OPEN_HOUR  = 9;
 const CALENDAR_CLOSE_HOUR = 19;
-// Square オンライン予約ページ
 const SQUARE_BOOKING_URL = "https://squareup.com/appointments/book/LQ2HAT073YS1N";
 
 function serveCalendar(res) {
@@ -618,23 +987,18 @@ function serveCalendar(res) {
   res.end(html);
 }
 
-// サービス（メニュー）一覧とservice_variation_idを取得して、
-// どのスタッフが担当しているかも併せて返す
 async function serveServices(res) {
   try {
-    // 1) カタログからAPPOINTMENTS_SERVICE（予約メニュー）を全部取得
     const catalog = await squareRequest("/v2/catalog/list?types=ITEM", { method: "GET" });
     const items = (catalog.objects || []).filter(
       (o) => o.item_data?.product_type === "APPOINTMENTS_SERVICE"
     );
 
-    // 2) 各メニューのバリエーション（=予約に使うservice_variation_id）を展開
     const services = [];
     for (const item of items) {
       const itemName = item.item_data?.name || "";
       for (const v of item.item_data?.variations || []) {
         const vd = v.item_variation_data || {};
-        // team_member_ids: そのバリエーションを担当できるスタッフ
         services.push({
           service_variation_id: v.id,
           name: itemName + (vd.name && vd.name !== itemName ? ` / ${vd.name}` : ""),
@@ -671,13 +1035,11 @@ async function serveAvailability(req, res) {
     const teamMemberId = staff.id;
     const serviceVariationId = staff.serviceVariationId;
 
-    // 検索範囲（JST）。過去にならないよう、現在時刻以降に補正する
     let rangeStart = new Date(`${startDate}T00:00:00+09:00`);
     const now = new Date();
     if (rangeStart < now) rangeStart = now;
     const rangeEnd = new Date(`${endDate}T23:59:59+09:00`);
 
-    // Square の空き枠検索（実際に予約できる枠だけが返る）
     const body = {
       query: {
         filter: {
@@ -703,7 +1065,6 @@ async function serveAvailability(req, res) {
 
     const availabilities = result.availabilities || [];
 
-    // 予約可能な時間帯（時単位）をセットに入れる
     const openSet = new Set();
     for (const a of availabilities) {
       if (!a.start_at) continue;
@@ -713,8 +1074,6 @@ async function serveAvailability(req, res) {
       openSet.add(`${dateStr}:${hour}`);
     }
 
-    // 日付×時間のスロットを作る
-    // open = Squareで予約できる / closed = 予約不可 / holiday = 定休日
     const slots = {};
     const cur = new Date(`${startDate}T00:00:00+09:00`);
     const end = new Date(`${endDate}T00:00:00+09:00`);
