@@ -137,6 +137,7 @@ async function serveTodayVisitors(res) {
 
       const segments = booking.appointment_segments || [];
       const menuNames = (await Promise.all(segments.map(getServiceName))).filter(Boolean);
+      const staffId = segments[0]?.team_member_id || "";
 
       return {
         bookingId: booking.id,
@@ -147,7 +148,8 @@ async function serveTodayVisitors(res) {
         startAt: booking.start_at,
         timeLabel: formatTokyoTime(booking.start_at),
         menu: menuNames.join("・") || "メニュー不明",
-        status: booking.status
+        status: booking.status,
+        staffId
       };
     }));
 
@@ -169,7 +171,7 @@ const EMAIL_TEMPLATES = {
   review: {
     label: "お礼 ＋ 口コミお願い",
     subject: "本日はありがとうございました｜Noëlhair",
-    buildHtml: (name, urls) => `
+    buildHtml: (name, urls, staffName) => `
 <div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
   <div style="text-align:center;margin-bottom:28px;">
     <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
@@ -178,16 +180,16 @@ const EMAIL_TEMPLATES = {
   <p style="font-size:15px;line-height:1.9;margin-top:12px;">本日はご来店いただき、ありがとうございました。</p>
   <p style="font-size:15px;line-height:1.9;margin-top:8px;">またのお越しを心よりお待ちしております。</p>
   <div style="margin:32px 0;padding:22px;background:#f0faf9;border-radius:10px;text-align:center;border:1px solid #d0ecea;">
-    <p style="font-size:14px;color:#256A64;font-weight:600;margin-bottom:14px;">よろしければ、Googleクチコミをいただけると大変励みになります🙏</p>
-    <a href="${urls.review}" style="display:inline-block;background:#3CA89F;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:600;letter-spacing:0.05em;">クチコミを書く →</a>
+    <p style="font-size:14px;color:#256A64;font-weight:400;margin-bottom:18px;line-height:1.8;">もしよければ、ひと言応援していただけると<br>とても励みになります。</p>
+    <a href="${urls.review}" style="display:inline-block;background:#3CA89F;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:500;letter-spacing:0.05em;">クチコミを書く →</a>
   </div>
-  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　二瓶武士<br>埼玉県鶴ヶ島市</p>
+  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　${staffName}</p>
 </div>`
   },
   nextvisit: {
     label: "お礼 ＋ 次回予約のご案内",
     subject: "本日はありがとうございました｜Noëlhair",
-    buildHtml: (name, urls) => `
+    buildHtml: (name, urls, staffName) => `
 <div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
   <div style="text-align:center;margin-bottom:28px;">
     <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
@@ -196,16 +198,16 @@ const EMAIL_TEMPLATES = {
   <p style="font-size:15px;line-height:1.9;margin-top:12px;">本日はご来店いただき、ありがとうございました。</p>
   <p style="font-size:15px;line-height:1.9;margin-top:8px;">またのお越しを心よりお待ちしております。</p>
   <div style="margin:32px 0;padding:22px;background:#f0faf9;border-radius:10px;text-align:center;border:1px solid #d0ecea;">
-    <p style="font-size:14px;color:#256A64;font-weight:600;margin-bottom:14px;">次回のご予約はこちらからどうぞ。</p>
-    <a href="${urls.booking}" style="display:inline-block;background:#3CA89F;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:600;letter-spacing:0.05em;">次回を予約する →</a>
+    <p style="font-size:14px;color:#256A64;font-weight:400;margin-bottom:14px;">次回のご予約はこちらからどうぞ。</p>
+    <a href="${urls.booking}" style="display:inline-block;background:#3CA89F;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:500;letter-spacing:0.05em;">次回を予約する →</a>
   </div>
-  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　二瓶武士<br>埼玉県鶴ヶ島市</p>
+  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　${staffName}</p>
 </div>`
   },
   thanks: {
     label: "お礼のみ",
     subject: "本日はありがとうございました｜Noëlhair",
-    buildHtml: (name, urls) => `
+    buildHtml: (name, urls, staffName) => `
 <div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
   <div style="text-align:center;margin-bottom:28px;">
     <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
@@ -213,13 +215,13 @@ const EMAIL_TEMPLATES = {
   <p style="font-size:15px;line-height:1.9;">${name} 様</p>
   <p style="font-size:15px;line-height:1.9;margin-top:12px;">本日はご来店いただき、ありがとうございました。</p>
   <p style="font-size:15px;line-height:1.9;margin-top:8px;">またのお越しを心よりお待ちしております。</p>
-  <p style="font-size:12px;color:#888;text-align:center;margin-top:40px;line-height:1.8;">Noëlhair　二瓶武士<br>埼玉県鶴ヶ島市</p>
+  <p style="font-size:12px;color:#888;text-align:center;margin-top:40px;line-height:1.8;">Noëlhair　${staffName}</p>
 </div>`
   }
 };
 
 async function handleSendEmail(body, res) {
-  const { email, customerName, templateKey } = body;
+  const { email, customerName, templateKey, staffId } = body;
 
   if (!email || !customerName || !templateKey) {
     return sendJson(res, 400, { error: "missing parameters" });
@@ -234,12 +236,14 @@ async function handleSendEmail(body, res) {
     return sendJson(res, 500, { error: "RESEND_API_KEY not set" });
   }
 
+  const staffName = staffId === "TMyoTzCPU06PeMxI" ? "NAOKO" : "二瓶武士";
+
   const urls = {
     review: config.googleReviewUrl,
     booking: config.squareBookingUrl
   };
 
-  const html = template.buildHtml(customerName, urls);
+  const html = template.buildHtml(customerName, urls, staffName);
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
@@ -382,7 +386,7 @@ async function loadVisitors() {
           <select class="template-select" id="tmpl-\${v.bookingId}">
             \${Object.entries(TEMPLATES).map(([k,l]) => \`<option value="\${k}">\${l}</option>\`).join('')}
           </select>
-          <button class="send-btn" onclick="sendEmail('\${v.bookingId}','\${v.email}','\${v.customerName}')">送信</button>
+          <button class="send-btn" onclick="sendEmail('\${v.bookingId}','\${v.email}','\${v.customerName}','\${v.staffId}')">送信</button>
         </div>\` : ''}
         \${isSent ? '<div class="sent-badge">✅ 送信済み</div>' : ''}
       </div>\`;
@@ -393,7 +397,7 @@ async function loadVisitors() {
   }
 }
 
-async function sendEmail(bookingId, email, customerName) {
+async function sendEmail(bookingId, email, customerName, staffId) {
   const templateKey = document.getElementById('tmpl-' + bookingId).value;
   const btn = document.querySelector('#card-' + bookingId + ' .send-btn');
   btn.disabled = true;
@@ -403,7 +407,7 @@ async function sendEmail(bookingId, email, customerName) {
     const res = await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, customerName, templateKey })
+      body: JSON.stringify({ email, customerName, templateKey, staffId })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'エラー');
