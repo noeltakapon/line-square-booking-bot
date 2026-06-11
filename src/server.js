@@ -167,39 +167,54 @@ async function serveTodayVisitors(res) {
 // メール送信
 // ============================================================
 
-// メールの共通ラッパーHTML
+// メールの共通ラッパーHTML（v4デザイン）
 function buildEmailWrapper(content, staffName) {
   return `<!DOCTYPE html>
 <html lang="ja">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f5f5f0;font-family:'Noto Serif JP',Georgia,serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 0;">
+<body style="margin:0;padding:0;background:#f5f4f0;font-family:Georgia,'Times New Roman',serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f4f0;padding:40px 0;">
   <tr><td align="center">
-    <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:#ffffff;border-radius:2px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
-      <!-- ヘッダー -->
-      <tr>
-        <td style="background:#1a1a1a;padding:32px 40px;text-align:center;">
-          <div style="font-family:Georgia,serif;font-size:28px;font-weight:400;letter-spacing:0.12em;color:#ffffff;">Noël<span style="color:#81D8D0;font-style:italic;">hair</span></div>
-          <div style="font-size:10px;letter-spacing:0.3em;color:#888;margin-top:6px;">HAIR SALON</div>
-        </td>
-      </tr>
-      <!-- コンテンツ -->
-      <tr>
-        <td style="padding:40px 40px 32px;">
-          ${content}
-        </td>
-      </tr>
-      <!-- フッター -->
-      <tr>
-        <td style="background:#f9f9f7;padding:24px 40px;border-top:1px solid #ebebeb;text-align:center;">
-          <div style="font-size:13px;color:#555;letter-spacing:0.05em;">Noëlhair　${staffName}</div>
-          <div style="font-size:11px;color:#aaa;margin-top:6px;letter-spacing:0.03em;">埼玉県鶴ヶ島市　noelhair.com</div>
-        </td>
-      </tr>
+    <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;">
+      <tr><td style="height:3px;line-height:3px;font-size:0;background:#81D8D0;">&nbsp;</td></tr>
+      <tr><td style="padding:48px 48px 0;text-align:center;">
+        <div style="font-size:32px;font-weight:400;letter-spacing:0.18em;color:#1a1a1a;">Noël<span style="color:#81D8D0;font-style:italic;">hair</span></div>
+      </td></tr>
+      <tr><td style="padding:28px 48px 0;">
+        <div style="height:0.5px;line-height:0.5px;font-size:0;background:#e8e8e8;">&nbsp;</div>
+      </td></tr>
+      <tr><td style="padding:36px 48px 0;">
+        ${content}
+      </td></tr>
+      <tr><td style="padding:28px 48px 40px;text-align:center;">
+        <div style="font-size:10px;letter-spacing:0.2em;color:#bbb;">NOËLHAIR&nbsp;&nbsp;・&nbsp;&nbsp;TSURUGASHIMA, SAITAMA</div>
+      </td></tr>
+      <tr><td style="height:3px;line-height:3px;font-size:0;background:#1a1a1a;">&nbsp;</td></tr>
     </table>
   </td></tr>
 </table>
 </body></html>`;
+}
+
+// 挨拶段落を組み立てる
+function buildGreetingParagraphs(name) {
+  return `
+      <p style="font-size:15px;color:#1a1a1a;margin:0 0 24px;letter-spacing:0.03em;">${name} 様</p>
+      <p style="font-size:14px;color:#444;line-height:2.2;margin:0 0 20px;letter-spacing:0.03em;">本日はご来店いただき、本当にありがとうございました。</p>
+      <p style="font-size:14px;color:#444;line-height:2.2;margin:0 0 20px;letter-spacing:0.03em;">お会いできてとても嬉しかったです。<br>ご自宅に帰られてからも、ぜひゆっくりお過ごしください。</p>`;
+}
+
+// Tiffanyブルーの案内ブロック（口コミ／次回予約など）
+function buildCtaBlock({ eyebrow, lead, sub, buttonLabel, url }) {
+  return `
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#81D8D0;">
+        <tr><td style="padding:36px;text-align:center;">
+          <div style="font-size:10px;letter-spacing:0.35em;color:rgba(255,255,255,0.8);margin-bottom:16px;">${eyebrow}</div>
+          <p style="font-size:14px;color:#fff;line-height:2;margin:0 0 8px;letter-spacing:0.02em;">${lead}</p>
+          <p style="font-size:13px;color:rgba(255,255,255,0.85);line-height:1.9;margin:0 0 24px;letter-spacing:0.02em;">${sub}</p>
+          <a href="${url}" style="display:inline-block;background:#fff;color:#1a1a1a;text-decoration:none;padding:14px 40px;font-size:11px;letter-spacing:0.2em;font-family:Georgia,'Times New Roman',serif;">${buttonLabel}</a>
+        </td></tr>
+      </table>`;
 }
 
 const EMAIL_TEMPLATES = {
@@ -207,39 +222,38 @@ const EMAIL_TEMPLATES = {
     label: "お礼 ＋ 口コミお願い",
     subject: "本日はありがとうございました｜Noëlhair",
     buildHtml: (name, urls, staffName) => buildEmailWrapper(`
-      <p style="font-size:16px;line-height:1.9;color:#1a1a1a;margin:0 0 20px;">${name} 様</p>
-      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 12px;">本日はご来店いただき、<br>ありがとうございました。</p>
-      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 32px;">またのお越しを心よりお待ちしております。</p>
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0faf9;border-radius:2px;border-left:3px solid #81D8D0;">
-        <tr><td style="padding:28px 24px;text-align:center;">
-          <p style="font-size:13px;color:#2a6a64;margin:0 0 20px;line-height:1.9;">もしよければ、ひと言応援していただけると<br>とても励みになります。</p>
-          <a href="${urls.review}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:14px 32px;font-size:13px;letter-spacing:0.12em;border-radius:1px;">クチコミを書く</a>
-        </td></tr>
-      </table>
+      ${buildGreetingParagraphs(name)}
+      <p style="font-size:14px;color:#444;line-height:2.2;margin:0 0 36px;letter-spacing:0.03em;">次回もお待ちしております。<br>何かご不明な点やご要望がありましたら、いつでもお気軽にご連絡ください。</p>
+      ${buildCtaBlock({
+        eyebrow: "YOUR VOICE MATTERS",
+        lead: "もしよければ、今日の感想をひと言だけ<br>残していただけませんか？",
+        sub: "口コミはお店にとって本当に大きな励みになります。<br>ほんの少しのお言葉でも、とても嬉しいです。",
+        buttonLabel: "クチコミを書く",
+        url: urls.review
+      })}
     `, staffName)
   },
   nextvisit: {
     label: "お礼 ＋ 次回予約のご案内",
     subject: "本日はありがとうございました｜Noëlhair",
     buildHtml: (name, urls, staffName) => buildEmailWrapper(`
-      <p style="font-size:16px;line-height:1.9;color:#1a1a1a;margin:0 0 20px;">${name} 様</p>
-      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 12px;">本日はご来店いただき、<br>ありがとうございました。</p>
-      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 32px;">またのお越しを心よりお待ちしております。</p>
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0faf9;border-radius:2px;border-left:3px solid #81D8D0;">
-        <tr><td style="padding:28px 24px;text-align:center;">
-          <p style="font-size:13px;color:#2a6a64;margin:0 0 20px;line-height:1.9;">次回のご予約はこちらからどうぞ。</p>
-          <a href="${urls.booking}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:14px 32px;font-size:13px;letter-spacing:0.12em;border-radius:1px;">次回を予約する</a>
-        </td></tr>
-      </table>
+      ${buildGreetingParagraphs(name)}
+      <p style="font-size:14px;color:#444;line-height:2.2;margin:0 0 36px;letter-spacing:0.03em;">次回もお待ちしております。<br>何かご不明な点やご要望がありましたら、いつでもお気軽にご連絡ください。</p>
+      ${buildCtaBlock({
+        eyebrow: "SEE YOU AGAIN SOON",
+        lead: "次回のご来店を、<br>心よりお待ちしております。",
+        sub: "ご都合のよい日時で、お気軽にご予約くださいませ。",
+        buttonLabel: "次回を予約する",
+        url: urls.booking
+      })}
     `, staffName)
   },
   thanks: {
     label: "お礼のみ",
     subject: "本日はありがとうございました｜Noëlhair",
     buildHtml: (name, urls, staffName) => buildEmailWrapper(`
-      <p style="font-size:16px;line-height:1.9;color:#1a1a1a;margin:0 0 20px;">${name} 様</p>
-      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 12px;">本日はご来店いただき、<br>ありがとうございました。</p>
-      <p style="font-size:15px;line-height:2;color:#333;margin:0;">またのお越しを心よりお待ちしております。</p>
+      ${buildGreetingParagraphs(name)}
+      <p style="font-size:14px;color:#444;line-height:2.2;margin:0;letter-spacing:0.03em;">次回もお待ちしております。<br>何かご不明な点やご要望がありましたら、いつでもお気軽にご連絡ください。</p>
     `, staffName)
   }
 };
@@ -274,7 +288,7 @@ async function handleSendEmail(body, res) {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/\n/g, "<br>");
-    html = buildEmailWrapper(`<div style="font-size:15px;line-height:2;color:#333;">${escapedBody}</div>`, staffName);
+    html = buildEmailWrapper(`<div style="font-size:14px;line-height:2.2;color:#444;letter-spacing:0.03em;">${escapedBody}</div>`, staffName);
   } else {
     html = template.buildHtml(customerName, urls, staffName);
   }
