@@ -167,56 +167,80 @@ async function serveTodayVisitors(res) {
 // メール送信
 // ============================================================
 
+// メールの共通ラッパーHTML
+function buildEmailWrapper(content, staffName) {
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:'Noto Serif JP',Georgia,serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:40px 0;">
+  <tr><td align="center">
+    <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:#ffffff;border-radius:2px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+      <!-- ヘッダー -->
+      <tr>
+        <td style="background:#1a1a1a;padding:32px 40px;text-align:center;">
+          <div style="font-family:Georgia,serif;font-size:28px;font-weight:400;letter-spacing:0.12em;color:#ffffff;">Noël<span style="color:#81D8D0;font-style:italic;">hair</span></div>
+          <div style="font-size:10px;letter-spacing:0.3em;color:#888;margin-top:6px;">HAIR SALON</div>
+        </td>
+      </tr>
+      <!-- コンテンツ -->
+      <tr>
+        <td style="padding:40px 40px 32px;">
+          ${content}
+        </td>
+      </tr>
+      <!-- フッター -->
+      <tr>
+        <td style="background:#f9f9f7;padding:24px 40px;border-top:1px solid #ebebeb;text-align:center;">
+          <div style="font-size:13px;color:#555;letter-spacing:0.05em;">Noëlhair　${staffName}</div>
+          <div style="font-size:11px;color:#aaa;margin-top:6px;letter-spacing:0.03em;">埼玉県鶴ヶ島市　noelhair.com</div>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
 const EMAIL_TEMPLATES = {
   review: {
     label: "お礼 ＋ 口コミお願い",
     subject: "本日はありがとうございました｜Noëlhair",
-    buildHtml: (name, urls, staffName) => `
-<div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
-  <div style="text-align:center;margin-bottom:28px;">
-    <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
-  </div>
-  <p style="font-size:15px;line-height:1.9;">${name} 様</p>
-  <p style="font-size:15px;line-height:1.9;margin-top:12px;">本日はご来店いただき、ありがとうございました。</p>
-  <p style="font-size:15px;line-height:1.9;margin-top:8px;">またのお越しを心よりお待ちしております。</p>
-  <div style="margin:32px 0;padding:22px;background:#f0faf9;border-radius:10px;text-align:center;border:1px solid #d0ecea;">
-    <p style="font-size:14px;color:#256A64;font-weight:400;margin-bottom:18px;line-height:1.8;">もしよければ、ひと言応援していただけると<br>とても励みになります。</p>
-    <a href="${urls.review}" style="display:inline-block;background:#3CA89F;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:500;letter-spacing:0.05em;">クチコミを書く →</a>
-  </div>
-  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　${staffName}</p>
-</div>`
+    buildHtml: (name, urls, staffName) => buildEmailWrapper(`
+      <p style="font-size:16px;line-height:1.9;color:#1a1a1a;margin:0 0 20px;">${name} 様</p>
+      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 12px;">本日はご来店いただき、<br>ありがとうございました。</p>
+      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 32px;">またのお越しを心よりお待ちしております。</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0faf9;border-radius:2px;border-left:3px solid #81D8D0;">
+        <tr><td style="padding:28px 24px;text-align:center;">
+          <p style="font-size:13px;color:#2a6a64;margin:0 0 20px;line-height:1.9;">もしよければ、ひと言応援していただけると<br>とても励みになります。</p>
+          <a href="${urls.review}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:14px 32px;font-size:13px;letter-spacing:0.12em;border-radius:1px;">クチコミを書く</a>
+        </td></tr>
+      </table>
+    `, staffName)
   },
   nextvisit: {
     label: "お礼 ＋ 次回予約のご案内",
     subject: "本日はありがとうございました｜Noëlhair",
-    buildHtml: (name, urls, staffName) => `
-<div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
-  <div style="text-align:center;margin-bottom:28px;">
-    <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
-  </div>
-  <p style="font-size:15px;line-height:1.9;">${name} 様</p>
-  <p style="font-size:15px;line-height:1.9;margin-top:12px;">本日はご来店いただき、ありがとうございました。</p>
-  <p style="font-size:15px;line-height:1.9;margin-top:8px;">またのお越しを心よりお待ちしております。</p>
-  <div style="margin:32px 0;padding:22px;background:#f0faf9;border-radius:10px;text-align:center;border:1px solid #d0ecea;">
-    <p style="font-size:14px;color:#256A64;font-weight:400;margin-bottom:14px;">次回のご予約はこちらからどうぞ。</p>
-    <a href="${urls.booking}" style="display:inline-block;background:#3CA89F;color:#fff;text-decoration:none;padding:13px 28px;border-radius:8px;font-size:14px;font-weight:500;letter-spacing:0.05em;">次回を予約する →</a>
-  </div>
-  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　${staffName}</p>
-</div>`
+    buildHtml: (name, urls, staffName) => buildEmailWrapper(`
+      <p style="font-size:16px;line-height:1.9;color:#1a1a1a;margin:0 0 20px;">${name} 様</p>
+      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 12px;">本日はご来店いただき、<br>ありがとうございました。</p>
+      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 32px;">またのお越しを心よりお待ちしております。</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0faf9;border-radius:2px;border-left:3px solid #81D8D0;">
+        <tr><td style="padding:28px 24px;text-align:center;">
+          <p style="font-size:13px;color:#2a6a64;margin:0 0 20px;line-height:1.9;">次回のご予約はこちらからどうぞ。</p>
+          <a href="${urls.booking}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:14px 32px;font-size:13px;letter-spacing:0.12em;border-radius:1px;">次回を予約する</a>
+        </td></tr>
+      </table>
+    `, staffName)
   },
   thanks: {
     label: "お礼のみ",
     subject: "本日はありがとうございました｜Noëlhair",
-    buildHtml: (name, urls, staffName) => `
-<div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
-  <div style="text-align:center;margin-bottom:28px;">
-    <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
-  </div>
-  <p style="font-size:15px;line-height:1.9;">${name} 様</p>
-  <p style="font-size:15px;line-height:1.9;margin-top:12px;">本日はご来店いただき、ありがとうございました。</p>
-  <p style="font-size:15px;line-height:1.9;margin-top:8px;">またのお越しを心よりお待ちしております。</p>
-  <p style="font-size:12px;color:#888;text-align:center;margin-top:40px;line-height:1.8;">Noëlhair　${staffName}</p>
-</div>`
+    buildHtml: (name, urls, staffName) => buildEmailWrapper(`
+      <p style="font-size:16px;line-height:1.9;color:#1a1a1a;margin:0 0 20px;">${name} 様</p>
+      <p style="font-size:15px;line-height:2;color:#333;margin:0 0 12px;">本日はご来店いただき、<br>ありがとうございました。</p>
+      <p style="font-size:15px;line-height:2;color:#333;margin:0;">またのお越しを心よりお待ちしております。</p>
+    `, staffName)
   }
 };
 
@@ -250,14 +274,7 @@ async function handleSendEmail(body, res) {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/\n/g, "<br>");
-    html = `
-<div style="font-family:'Noto Serif JP',Georgia,serif;max-width:520px;margin:0 auto;padding:32px 24px;color:#111;">
-  <div style="text-align:center;margin-bottom:28px;">
-    <span style="font-family:Georgia,serif;font-size:26px;font-weight:400;letter-spacing:0.08em;">Noël<span style="color:#3CA89F;font-style:italic;">hair</span></span>
-  </div>
-  <div style="font-size:15px;line-height:1.9;">${escapedBody}</div>
-  <p style="font-size:12px;color:#888;text-align:center;margin-top:28px;line-height:1.8;">Noëlhair　${staffName}</p>
-</div>`;
+    html = buildEmailWrapper(`<div style="font-size:15px;line-height:2;color:#333;">${escapedBody}</div>`, staffName);
   } else {
     html = template.buildHtml(customerName, urls, staffName);
   }
