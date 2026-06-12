@@ -376,6 +376,12 @@ function serveAdminPage(res) {
   .empty{text-align:center;padding:50px 20px;color:var(--ink-soft);}
   .empty-icon{font-size:36px;margin-bottom:12px;}
   .reload-btn{display:block;margin:16px auto 0;padding:10px 24px;background:var(--white);border:1.5px solid var(--line);border-radius:8px;font-size:13px;cursor:pointer;font-family:'Noto Serif JP',serif;color:var(--tiffany-ink);font-weight:600;}
+  .free-card{background:var(--white);border-radius:12px;border:1.5px dashed var(--tiffany);padding:16px;margin-bottom:18px;}
+  .free-title{font-size:13px;font-weight:600;color:var(--tiffany-ink);margin-bottom:10px;letter-spacing:0.05em;}
+  .free-row{display:flex;gap:8px;margin-bottom:8px;}
+  .free-input{flex:1;padding:10px 10px;border-radius:8px;border:1.5px solid var(--line);font-size:13px;font-family:'Noto Serif JP',serif;background:var(--white);color:var(--ink);box-sizing:border-box;}
+  .free-input:focus{outline:none;border-color:var(--tiffany);}
+  .free-actions{display:flex;gap:8px;align-items:center;margin-top:4px;}
   .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:100;align-items:flex-end;justify-content:center;}
   .modal-overlay.open{display:flex;}
   .modal{background:var(--white);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;}
@@ -404,6 +410,23 @@ function serveAdminPage(res) {
 </div>
 <div class="main">
   <div class="date-label" id="dateLabel">読み込み中...</div>
+
+  <div class="free-card">
+    <div class="free-title">予約なしのお客様へ送信</div>
+    <div class="free-row">
+      <input type="text" class="free-input" id="freeName" placeholder="お客様名（例：山田 花子）" style="flex:1;">
+    </div>
+    <div class="free-row">
+      <input type="email" class="free-input" id="freeEmail" placeholder="メールアドレス" style="flex:1;">
+    </div>
+    <div class="free-row free-actions">
+      <select class="template-select" id="freeTemplate" style="flex:1;">
+        ${Object.entries(EMAIL_TEMPLATES).map(([k,t]) => '<option value="' + k + '">' + t.label + '</option>').join('')}
+      </select>
+      <button class="edit-btn" onclick="openFreeModal()">内容を確認・編集</button>
+    </div>
+  </div>
+
   <div id="visitorList"><div class="loading">来店者を確認しています...</div></div>
   <button class="reload-btn" onclick="loadVisitors()">🔄 再読み込み</button>
 </div>
@@ -526,8 +549,30 @@ function openModal(bookingId, email, customerName, staffId) {
   document.getElementById('modalOverlay').classList.add('open');
 }
 
+function openFreeModal() {
+  const name = document.getElementById('freeName').value.trim();
+  const email = document.getElementById('freeEmail').value.trim();
+  const templateKey = document.getElementById('freeTemplate').value;
+
+  if (!name) { alert('お客様名を入力してください'); return; }
+  if (!email) { alert('メールアドレスを入力してください'); return; }
+
+  const staffName = '二瓶武士';
+  let bodyText = (TEMPLATE_BODIES[templateKey] || '').replace(/お客様/g, name).replace(/二瓶武士/g, staffName);
+
+  currentModal = { bookingId: null, email, customerName: name, staffId: 'TM4KBBvc9KKU5Auf', templateKey, isFree: true };
+
+  document.getElementById('modalTitle').textContent = name + ' 様へのメール';
+  document.getElementById('modalToInput').value = email;
+  document.getElementById('modalTestMode').checked = false;
+  document.getElementById('modalTestMode').parentElement.style.display = 'none';
+  document.getElementById('modalBody').value = bodyText;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('open');
+  document.getElementById('modalTestMode').parentElement.style.display = '';
   currentModal = null;
 }
 
@@ -556,7 +601,10 @@ async function confirmSend() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'エラー');
 
-    if (!isTest) {
+    if (currentModal.isFree) {
+      document.getElementById('freeName').value = '';
+      document.getElementById('freeEmail').value = '';
+    } else if (!isTest) {
       sentSet.add(currentModal.bookingId);
       saveSent();
       document.getElementById('card-' + currentModal.bookingId).classList.add('sent');
