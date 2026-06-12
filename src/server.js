@@ -589,6 +589,12 @@ function saveSent() {
   localStorage.setItem('noelhair_sent', JSON.stringify([...sentSet]));
 }
 
+function resetModalSendButton() {
+  const btn = document.getElementById('modalSendBtn');
+  btn.disabled = false;
+  btn.textContent = 'この内容で送信する';
+}
+
 async function loadVisitors() {
   document.getElementById('visitorList').innerHTML = '<div class="loading">来店者を確認しています...</div>';
   try {
@@ -638,6 +644,7 @@ async function loadVisitors() {
 }
 
 function openModal(bookingId, email, customerName, staffId) {
+  resetModalSendButton();
   const templateKey = document.getElementById('tmpl-' + bookingId).value;
   const staffName = staffId === 'TMyoTzCPU06PeMxI' ? 'NAOKO' : '二瓶武士';
 
@@ -653,6 +660,7 @@ function openModal(bookingId, email, customerName, staffId) {
 }
 
 function openFreeModal() {
+  resetModalSendButton();
   const name = document.getElementById('freeName').value.trim();
   const email = document.getElementById('freeEmail').value.trim();
   const templateKey = document.getElementById('freeTemplate').value;
@@ -676,6 +684,7 @@ function openFreeModal() {
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('open');
   document.getElementById('modalTestMode').parentElement.style.display = '';
+  resetModalSendButton();
   currentModal = null;
 }
 
@@ -719,8 +728,7 @@ async function confirmSend() {
     closeModal();
   } catch(e) {
     alert('送信失敗: ' + e.message);
-    btn.disabled = false;
-    btn.textContent = 'この内容で送信する';
+    resetModalSendButton();
   }
 }
 
