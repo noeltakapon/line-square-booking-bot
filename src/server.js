@@ -221,26 +221,25 @@ function buildCtaBlock({ eyebrow, lead, sub, buttonLabel, url }) {
 
 function buildReviewCta(urls) {
   return `
-      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dddddd;background:#ffffff;margin-top:10px;">
-        <tr><td style="padding:44px 18px;text-align:center;">
-          <div style="font-size:14px;color:#444;line-height:2.35;margin:0 0 26px;letter-spacing:0.01em;word-break:keep-all;">
+      <table width="112%" cellpadding="0" cellspacing="0" align="center" style="width:112%;border:1px solid #dddddd;background:#ffffff;margin:10px -6% 0;">
+        <tr><td style="padding:44px 20px;text-align:center;">
+          <div style="font-size:14px;color:#444;line-height:2.35;margin:0 0 26px;letter-spacing:0;word-break:keep-all;">
             もしよろしければ、<br>
             感じたことをひと言<br>
             お聞かせいただけると<br>
             嬉しいです。
           </div>
           <div style="height:1px;line-height:1px;font-size:0;background:#e8e8e8;margin:0 auto 26px;width:78%;">&nbsp;</div>
-          <div style="font-size:13px;color:#666;line-height:2.35;margin:0 0 30px;letter-spacing:0.01em;word-break:keep-all;">
+          <div style="font-size:13px;color:#666;line-height:2.35;margin:0 0 30px;letter-spacing:0;word-break:keep-all;">
             口コミはお店にとって<br>
-            本当に大きな励みに<br>
-            なります。<br>
+            本当に大きな励みになります。<br>
             ほんの少しのお言葉でも<br>
             とても嬉しいです。
           </div>
           <table cellpadding="0" cellspacing="0" align="center" style="margin:0 auto;">
             <tr>
-              <td align="center" width="220" style="background:#81D8D0;">
-                <a href="${urls.review}" style="display:block;width:220px;background:#81D8D0;color:#ffffff;text-decoration:none;padding:15px 0;font-size:14px;line-height:1.2;letter-spacing:0.04em;font-family:Georgia,'Times New Roman',serif;font-weight:600;white-space:nowrap;word-break:keep-all;">クチコミを書く</a>
+              <td align="center" width="260" style="background:#81D8D0;">
+                <a href="${urls.review}" style="display:block;width:260px;background:#81D8D0;color:#ffffff;text-decoration:none;padding:15px 0;font-size:14px;line-height:1.2;letter-spacing:0;font-family:Georgia,'Times New Roman',serif;font-weight:600;white-space:nowrap;word-break:keep-all;">クチコミを書く</a>
               </td>
             </tr>
           </table>
