@@ -208,13 +208,13 @@ function buildGreetingParagraphs(name) {
 // Tiffanyブルーの案内ブロック（口コミ／次回予約など）
 function buildCtaBlock({ eyebrow, lead, sub, buttonLabel, url }) {
   return `
-      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eeeeee;background:#ffffff;margin-top:10px;">
-        <tr><td style="padding:42px 36px;text-align:center;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dddddd;background:#ffffff;margin-top:10px;">
+        <tr><td style="padding:48px 44px;text-align:center;">
           ${eyebrow ? `<div style="font-size:10px;letter-spacing:0.28em;color:#c7c7c7;margin-bottom:22px;">${eyebrow}</div>` : ""}
-          <p style="font-size:13px;color:#9a9a9a;line-height:2.4;margin:0 0 28px;letter-spacing:0.08em;">${lead}</p>
-          <div style="height:1px;line-height:1px;font-size:0;background:#eeeeee;margin:0 0 28px;">&nbsp;</div>
-          <p style="font-size:14px;color:#555;line-height:2.4;margin:0 0 28px;letter-spacing:0.08em;">${sub}</p>
-          <a href="${url}" style="display:inline-block;background:#8FD8D2;color:#ffffff;text-decoration:none;padding:15px 54px;font-size:12px;letter-spacing:0.18em;font-family:Georgia,'Times New Roman',serif;">${buttonLabel}</a>
+          <p style="font-size:14px;color:#444;line-height:2.35;margin:0 0 26px;letter-spacing:0.06em;">${lead}</p>
+          <div style="height:1px;line-height:1px;font-size:0;background:#e8e8e8;margin:0 0 26px;">&nbsp;</div>
+          <p style="font-size:13px;color:#666;line-height:2.35;margin:0 0 30px;letter-spacing:0.05em;">${sub}</p>
+          <a href="${url}" style="display:inline-block;background:#81D8D0;color:#ffffff;text-decoration:none;padding:16px 56px;font-size:14px;line-height:1.2;letter-spacing:0.16em;font-family:Georgia,'Times New Roman',serif;font-weight:600;">${buttonLabel}</a>
         </td></tr>
       </table>`;
 }
@@ -222,8 +222,8 @@ function buildCtaBlock({ eyebrow, lead, sub, buttonLabel, url }) {
 function buildReviewCta(urls) {
   return buildCtaBlock({
     eyebrow: "",
-    lead: "口コミはお店にとって<br>本当に大きな励みになります。<br>ほんの少しのお言葉でも、とても嬉しいです。",
-    sub: "もしよろしければ、感じたことをひと言<br>お聞かせいただけると嬉しいです。",
+    lead: "もしよろしければ、感じたことをひと言<br>お聞かせいただけると嬉しいです。",
+    sub: "口コミはお店にとって<br>本当に大きな励みになります。<br>ほんの少しのお言葉でも、とても嬉しいです。",
     buttonLabel: "クチコミを書く",
     url: urls.review
   });
@@ -395,7 +395,7 @@ async function handleSendEmail(body, res) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        from: "Noëlhair 二瓶武士 <noreply@noelhair.com>",
+        from: "Noëlhair <noreply@noelhair.com>",
         to: [email],
         subject: template.subject,
         html
