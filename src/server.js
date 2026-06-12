@@ -383,6 +383,10 @@ function serveAdminPage(res) {
   .modal-title{font-size:15px;font-weight:600;color:var(--tiffany-ink);}
   .modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--ink-soft);padding:0 4px;}
   .modal-to{font-size:13px;color:var(--ink-soft);margin-bottom:12px;padding:10px 12px;background:var(--bg);border-radius:8px;}
+  .modal-to-input{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--ink);background:var(--white);box-sizing:border-box;margin-top:4px;}
+  .modal-to-input:focus{outline:none;border-color:var(--tiffany);}
+  .modal-test{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);margin-top:8px;}
+  .modal-test input{width:14px;height:14px;}
   .modal-label{font-size:12px;color:var(--ink-soft);margin-bottom:6px;font-weight:600;letter-spacing:0.05em;}
   .modal-textarea{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:14px;font-size:14px;font-family:'Noto Serif JP',serif;line-height:1.9;color:var(--ink);resize:vertical;min-height:220px;background:var(--white);}
   .modal-textarea:focus{outline:none;border-color:var(--tiffany);}
@@ -410,7 +414,14 @@ function serveAdminPage(res) {
       <div class="modal-title" id="modalTitle">メール内容を確認・編集</div>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
-    <div class="modal-to" id="modalTo"></div>
+    <div class="modal-to">
+      宛先：
+      <input type="email" class="modal-to-input" id="modalToInput">
+      <div class="modal-test">
+        <input type="checkbox" id="modalTestMode">
+        <label for="modalTestMode">テスト送信（このお客様を「送信済み」にしない）</label>
+      </div>
+    </div>
     <div class="modal-label">本文（自由に編集できます）</div>
     <textarea class="modal-textarea" id="modalBody"></textarea>
     <div class="modal-actions">
@@ -509,7 +520,8 @@ function openModal(bookingId, email, customerName, staffId) {
   currentModal = { bookingId, email, customerName, staffId, templateKey };
 
   document.getElementById('modalTitle').textContent = customerName + ' 様へのメール';
-  document.getElementById('modalTo').textContent = '宛先：' + email;
+  document.getElementById('modalToInput').value = email;
+  document.getElementById('modalTestMode').checked = false;
   document.getElementById('modalBody').value = bodyText;
   document.getElementById('modalOverlay').classList.add('open');
 }
@@ -526,13 +538,15 @@ async function confirmSend() {
   btn.textContent = '送信中...';
 
   const customBody = document.getElementById('modalBody').value;
+  const sendToEmail = document.getElementById('modalToInput').value;
+  const isTest = document.getElementById('modalTestMode').checked;
 
   try {
     const res = await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: currentModal.email,
+        email: sendToEmail,
         customerName: currentModal.customerName,
         templateKey: currentModal.templateKey,
         staffId: currentModal.staffId,
@@ -542,10 +556,12 @@ async function confirmSend() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'エラー');
 
-    sentSet.add(currentModal.bookingId);
-    saveSent();
-    document.getElementById('card-' + currentModal.bookingId).classList.add('sent');
-    document.querySelector('#card-' + currentModal.bookingId + ' .visitor-actions').innerHTML = '<div class="sent-badge">✅ 送信済み</div>';
+    if (!isTest) {
+      sentSet.add(currentModal.bookingId);
+      saveSent();
+      document.getElementById('card-' + currentModal.bookingId).classList.add('sent');
+      document.querySelector('#card-' + currentModal.bookingId + ' .visitor-actions').innerHTML = '<div class="sent-badge">✅ 送信済み</div>';
+    }
     closeModal();
   } catch(e) {
     alert('送信失敗: ' + e.message);
