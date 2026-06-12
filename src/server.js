@@ -199,22 +199,100 @@ function buildEmailWrapper(content, staffName) {
 // 挨拶段落を組み立てる
 function buildGreetingParagraphs(name) {
   return `
-      <p style="font-size:15px;color:#1a1a1a;margin:0 0 24px;letter-spacing:0.03em;">${name} 様</p>
-      <p style="font-size:14px;color:#444;line-height:2.2;margin:0 0 20px;letter-spacing:0.03em;">本日はご来店いただき、本当にありがとうございました。</p>
-      <p style="font-size:14px;color:#444;line-height:2.2;margin:0 0 20px;letter-spacing:0.03em;">お会いできてとても嬉しかったです。<br>ご自宅に帰られてからも、ぜひゆっくりお過ごしください。</p>`;
+      <p style="font-size:18px;color:#1a1a1a;margin:0 0 44px;letter-spacing:0.08em;">${name} 様</p>
+      <p style="font-size:14px;color:#444;line-height:2.4;margin:0 0 34px;letter-spacing:0.08em;">本日はご来店いただき、<br>ありがとうございました。</p>
+      <p style="font-size:14px;color:#444;line-height:2.4;margin:0 0 34px;letter-spacing:0.08em;">いつもお越しいただき、<br>本当にありがとうございます。</p>
+      <p style="font-size:14px;color:#444;line-height:2.4;margin:0 0 44px;letter-spacing:0.08em;">またお話できる日を<br>楽しみにしております。</p>`;
 }
 
 // Tiffanyブルーの案内ブロック（口コミ／次回予約など）
 function buildCtaBlock({ eyebrow, lead, sub, buttonLabel, url }) {
   return `
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#81D8D0;">
-        <tr><td style="padding:36px;text-align:center;">
-          <div style="font-size:10px;letter-spacing:0.35em;color:rgba(255,255,255,0.8);margin-bottom:16px;">${eyebrow}</div>
-          <p style="font-size:14px;color:#fff;line-height:2;margin:0 0 8px;letter-spacing:0.02em;">${lead}</p>
-          <p style="font-size:13px;color:rgba(255,255,255,0.85);line-height:1.9;margin:0 0 24px;letter-spacing:0.02em;">${sub}</p>
-          <a href="${url}" style="display:inline-block;background:#fff;color:#1a1a1a;text-decoration:none;padding:14px 40px;font-size:11px;letter-spacing:0.2em;font-family:Georgia,'Times New Roman',serif;">${buttonLabel}</a>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eeeeee;background:#ffffff;margin-top:10px;">
+        <tr><td style="padding:42px 36px;text-align:center;">
+          ${eyebrow ? `<div style="font-size:10px;letter-spacing:0.28em;color:#c7c7c7;margin-bottom:22px;">${eyebrow}</div>` : ""}
+          <p style="font-size:13px;color:#9a9a9a;line-height:2.4;margin:0 0 28px;letter-spacing:0.08em;">${lead}</p>
+          <div style="height:1px;line-height:1px;font-size:0;background:#eeeeee;margin:0 0 28px;">&nbsp;</div>
+          <p style="font-size:14px;color:#555;line-height:2.4;margin:0 0 28px;letter-spacing:0.08em;">${sub}</p>
+          <a href="${url}" style="display:inline-block;background:#8FD8D2;color:#ffffff;text-decoration:none;padding:15px 54px;font-size:12px;letter-spacing:0.18em;font-family:Georgia,'Times New Roman',serif;">${buttonLabel}</a>
         </td></tr>
       </table>`;
+}
+
+function buildReviewCta(urls) {
+  return buildCtaBlock({
+    eyebrow: "",
+    lead: "口コミはお店にとって<br>本当に大きな励みになります。<br>ほんの少しのお言葉でも、とても嬉しいです。",
+    sub: "もしよろしければ、感じたことをひと言<br>お聞かせいただけると嬉しいです。",
+    buttonLabel: "クチコミを書く",
+    url: urls.review
+  });
+}
+
+function buildNextVisitCta(urls) {
+  return buildCtaBlock({
+    eyebrow: "SEE YOU AGAIN SOON",
+    lead: "次回のご来店を、<br>心よりお待ちしております。",
+    sub: "ご都合のよい日時で、お気軽にご予約くださいませ。",
+    buttonLabel: "次回を予約する",
+    url: urls.booking
+  });
+}
+
+function buildTemplateCta(templateKey, urls) {
+  if (templateKey === "review") return buildReviewCta(urls);
+  if (templateKey === "nextvisit") return buildNextVisitCta(urls);
+  return "";
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function stripLegacyTemplateHtml(value) {
+  let text = decodeHtmlEntities(value);
+
+  if (!/(<!doctype|<html|<head|<body|<table|<tr|<td|<div|<p|<br|<span|<a)\b/i.test(text)) {
+    return text;
+  }
+
+  text = text
+    .replace(/<!doctype[^>]*>/gi, "")
+    .replace(/<head[\s\S]*?<\/head>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|td|tr|table|body|html)>/gi, "\n")
+    .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, "$1")
+    .replace(/<[^>]+>/g, "")
+    .split("\n")
+    .map(line => line.trim())
+    .filter(line => line && !/^No[ëe]l\s*hair$/i.test(line) && !/^No[ëe]lhair$/i.test(line) && !/^NO[ËE]LHAIR\s*[・\s]+TSURUGASHIMA,\s*SAITAMA$/i.test(line))
+    .join("\n\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return text;
+}
+
+function buildPlainTextEmailContent(bodyText, hasCta) {
+  const escapedBody = escapeHtml(stripLegacyTemplateHtml(bodyText)).replace(/\r\n|\r|\n/g, "<br>");
+  return `<div style="font-size:14px;line-height:2.2;color:#444;letter-spacing:0.03em;margin:0${hasCta ? " 0 36px" : ""};">${escapedBody}</div>`;
 }
 
 const EMAIL_TEMPLATES = {
@@ -223,14 +301,7 @@ const EMAIL_TEMPLATES = {
     subject: "本日はありがとうございました｜Noëlhair",
     buildHtml: (name, urls, staffName) => buildEmailWrapper(`
       ${buildGreetingParagraphs(name)}
-      <p style="font-size:14px;color:#444;line-height:2.2;margin:0 0 36px;letter-spacing:0.03em;">次回もお待ちしております。<br>何かご不明な点やご要望がありましたら、いつでもお気軽にご連絡ください。</p>
-      ${buildCtaBlock({
-        eyebrow: "YOUR VOICE MATTERS",
-        lead: "もしよければ、今日の感想をひと言だけ<br>残していただけませんか？",
-        sub: "口コミはお店にとって本当に大きな励みになります。<br>ほんの少しのお言葉でも、とても嬉しいです。",
-        buttonLabel: "クチコミを書く",
-        url: urls.review
-      })}
+      ${buildReviewCta(urls)}
     `, staffName)
   },
   nextvisit: {
@@ -238,14 +309,7 @@ const EMAIL_TEMPLATES = {
     subject: "本日はありがとうございました｜Noëlhair",
     buildHtml: (name, urls, staffName) => buildEmailWrapper(`
       ${buildGreetingParagraphs(name)}
-      <p style="font-size:14px;color:#444;line-height:2.2;margin:0 0 36px;letter-spacing:0.03em;">次回もお待ちしております。<br>何かご不明な点やご要望がありましたら、いつでもお気軽にご連絡ください。</p>
-      ${buildCtaBlock({
-        eyebrow: "SEE YOU AGAIN SOON",
-        lead: "次回のご来店を、<br>心よりお待ちしております。",
-        sub: "ご都合のよい日時で、お気軽にご予約くださいませ。",
-        buttonLabel: "次回を予約する",
-        url: urls.booking
-      })}
+      ${buildNextVisitCta(urls)}
     `, staffName)
   },
   thanks: {
@@ -253,9 +317,43 @@ const EMAIL_TEMPLATES = {
     subject: "本日はありがとうございました｜Noëlhair",
     buildHtml: (name, urls, staffName) => buildEmailWrapper(`
       ${buildGreetingParagraphs(name)}
-      <p style="font-size:14px;color:#444;line-height:2.2;margin:0;letter-spacing:0.03em;">次回もお待ちしております。<br>何かご不明な点やご要望がありましたら、いつでもお気軽にご連絡ください。</p>
     `, staffName)
   }
+};
+
+const TEMPLATE_BODIES = {
+  review: `お客様 様
+
+本日はご来店いただき、
+ありがとうございました。
+
+いつもお越しいただき、
+本当にありがとうございます。
+
+またお話できる日を
+楽しみにしております。`,
+
+  nextvisit: `お客様 様
+
+本日はご来店いただき、
+ありがとうございました。
+
+いつもお越しいただき、
+本当にありがとうございます。
+
+またお話できる日を
+楽しみにしております。`,
+
+  thanks: `お客様 様
+
+本日はご来店いただき、
+ありがとうございました。
+
+いつもお越しいただき、
+本当にありがとうございます。
+
+またお話できる日を
+楽しみにしております。`
 };
 
 async function handleSendEmail(body, res) {
@@ -283,12 +381,8 @@ async function handleSendEmail(body, res) {
 
   let html;
   if (customBody) {
-    const escapedBody = customBody
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\n/g, "<br>");
-    html = buildEmailWrapper(`<div style="font-size:14px;line-height:2.2;color:#444;letter-spacing:0.03em;">${escapedBody}</div>`, staffName);
+    const cta = buildTemplateCta(templateKey, urls);
+    html = buildEmailWrapper(`${buildPlainTextEmailContent(customBody, Boolean(cta))}${cta}`, staffName);
   } else {
     html = template.buildHtml(customerName, urls, staffName);
   }
@@ -459,25 +553,7 @@ const TEMPLATES = ${JSON.stringify(
     Object.fromEntries(Object.entries(EMAIL_TEMPLATES).map(([k, t]) => [k, t.label]))
   )};
 
-const TEMPLATE_BODIES = ${JSON.stringify(
-    Object.fromEntries(Object.entries(EMAIL_TEMPLATES).map(([k, t]) => {
-      const staffName = "二瓶武士";
-      const reviewUrl = "https://g.page/r/CXxYjKYZZaSHEAE/review";
-      const bookingUrl = "https://noelhair.square.site";
-      const previewName = "お客様";
-      const body = t.buildHtml(previewName, { review: reviewUrl, booking: bookingUrl }, staffName);
-      const textBody = body
-        .replace(/<div[^>]*>/g, "").replace(/<\/div>/g, "\n")
-        .replace(/<p[^>]*>/g, "").replace(/<\/p>/g, "\n")
-        .replace(/<a[^>]*>([^<]*)<\/a>/g, "$1")
-        .replace(/<span[^>]*>([^<]*)<\/span>/g, "$1")
-        .replace(/<br\s*\/?>/g, "\n")
-        .replace(/&nbsp;/g, " ")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
-      return [k, textBody];
-    }))
-  )};
+const TEMPLATE_BODIES = ${JSON.stringify(TEMPLATE_BODIES)};
 
 const sentSet = new Set(JSON.parse(localStorage.getItem('noelhair_sent') || '[]'));
 let currentModal = null;
