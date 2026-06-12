@@ -209,24 +209,43 @@ function buildGreetingParagraphs(name) {
 function buildCtaBlock({ eyebrow, lead, sub, buttonLabel, url }) {
   return `
       <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dddddd;background:#ffffff;margin-top:10px;">
-        <tr><td style="padding:48px 44px;text-align:center;">
+        <tr><td style="padding:46px 28px;text-align:center;">
           ${eyebrow ? `<div style="font-size:10px;letter-spacing:0.28em;color:#c7c7c7;margin-bottom:22px;">${eyebrow}</div>` : ""}
-          <p style="font-size:14px;color:#444;line-height:2.35;margin:0 0 26px;letter-spacing:0.06em;">${lead}</p>
+          <p style="font-size:14px;color:#444;line-height:2.35;margin:0 0 26px;letter-spacing:0.02em;">${lead}</p>
           <div style="height:1px;line-height:1px;font-size:0;background:#e8e8e8;margin:0 0 26px;">&nbsp;</div>
-          <p style="font-size:13px;color:#666;line-height:2.35;margin:0 0 30px;letter-spacing:0.05em;">${sub}</p>
-          <a href="${url}" style="display:inline-block;background:#81D8D0;color:#ffffff;text-decoration:none;padding:16px 56px;font-size:14px;line-height:1.2;letter-spacing:0.16em;font-family:Georgia,'Times New Roman',serif;font-weight:600;">${buttonLabel}</a>
+          <p style="font-size:13px;color:#666;line-height:2.35;margin:0 0 30px;letter-spacing:0.02em;">${sub}</p>
+          <a href="${url}" style="display:inline-block;background:#81D8D0;color:#ffffff;text-decoration:none;padding:15px 34px;font-size:14px;line-height:1.2;letter-spacing:0.06em;font-family:Georgia,'Times New Roman',serif;font-weight:600;white-space:nowrap;">${buttonLabel}</a>
         </td></tr>
       </table>`;
 }
 
 function buildReviewCta(urls) {
-  return buildCtaBlock({
-    eyebrow: "",
-    lead: "もしよろしければ、感じたことをひと言<br>お聞かせいただけると嬉しいです。",
-    sub: "口コミはお店にとって<br>本当に大きな励みになります。<br>ほんの少しのお言葉でも、とても嬉しいです。",
-    buttonLabel: "クチコミを書く",
-    url: urls.review
-  });
+  return `
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dddddd;background:#ffffff;margin-top:10px;">
+        <tr><td style="padding:44px 18px;text-align:center;">
+          <div style="font-size:14px;color:#444;line-height:2.35;margin:0 0 26px;letter-spacing:0.01em;word-break:keep-all;">
+            もしよろしければ、<br>
+            感じたことをひと言<br>
+            お聞かせいただけると<br>
+            嬉しいです。
+          </div>
+          <div style="height:1px;line-height:1px;font-size:0;background:#e8e8e8;margin:0 auto 26px;width:78%;">&nbsp;</div>
+          <div style="font-size:13px;color:#666;line-height:2.35;margin:0 0 30px;letter-spacing:0.01em;word-break:keep-all;">
+            口コミはお店にとって<br>
+            本当に大きな励みに<br>
+            なります。<br>
+            ほんの少しのお言葉でも<br>
+            とても嬉しいです。
+          </div>
+          <table cellpadding="0" cellspacing="0" align="center" style="margin:0 auto;">
+            <tr>
+              <td align="center" width="220" style="background:#81D8D0;">
+                <a href="${urls.review}" style="display:block;width:220px;background:#81D8D0;color:#ffffff;text-decoration:none;padding:15px 0;font-size:14px;line-height:1.2;letter-spacing:0.04em;font-family:Georgia,'Times New Roman',serif;font-weight:600;white-space:nowrap;word-break:keep-all;">クチコミを書く</a>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>`;
 }
 
 function buildNextVisitCta(urls) {
