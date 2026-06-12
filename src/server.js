@@ -356,21 +356,30 @@ const TEMPLATE_BODIES = {
 本日はご来店いただき、
 ありがとうございました。
 
-いつもお越しいただき、
-本当にありがとうございます。
+その後、髪の扱いやすさは
+いかがでしょうか。
 
-またお話できる日を
-楽しみにしております。`,
+きれいな状態を保てるよう、
+次回も髪の状態に合わせて
+ご提案させていただきます。
+
+ご都合のよいタイミングで、
+またのご予約を
+心よりお待ちしております。`,
 
   thanks: `お客様 様
 
 本日はご来店いただき、
 ありがとうございました。
 
-いつもお越しいただき、
-本当にありがとうございます。
+ゆっくりお過ごしいただけましたら
+幸いです。
 
-またお話できる日を
+気になることなどございましたら、
+いつでもお気軽に
+ご連絡ください。
+
+またお会いできる日を
 楽しみにしております。`
 };
 
@@ -612,7 +621,7 @@ async function loadVisitors() {
             \${!hasEmail ? '<div class="no-email">メールアドレス未登録</div>' : ''}
           </div>
         </div>
-        \${hasEmail && !isSent ? \`
+        \${hasEmail ? \`
         <div class="visitor-actions">
           <select class="template-select" id="tmpl-\${v.bookingId}">
             \${Object.entries(TEMPLATES).map(([k,l]) => \`<option value="\${k}">\${l}</option>\`).join('')}
@@ -702,7 +711,10 @@ async function confirmSend() {
       sentSet.add(currentModal.bookingId);
       saveSent();
       document.getElementById('card-' + currentModal.bookingId).classList.add('sent');
-      document.querySelector('#card-' + currentModal.bookingId + ' .visitor-actions').innerHTML = '<div class="sent-badge">✅ 送信済み</div>';
+      const badge = document.querySelector('#card-' + currentModal.bookingId + ' .sent-badge');
+      if (!badge) {
+        document.getElementById('card-' + currentModal.bookingId).insertAdjacentHTML('beforeend', '<div class="sent-badge">✅ 送信済み</div>');
+      }
     }
     closeModal();
   } catch(e) {
